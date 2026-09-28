@@ -1,0 +1,30 @@
+[package]
+name = "invoice-company-app"
+version = "0.1.0"
+description = "Local quote and invoice app"
+edition = "2021"
+rust-version = "1.90"
+
+[lib]
+name = "invoice_company_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[dependencies]
+tauri = { version = "2.10", features = [] }
+tauri-plugin-updater = "2.13"
+tauri-plugin-process = "2.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde", "clock"] }
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+fs2 = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+tempfile = "3"

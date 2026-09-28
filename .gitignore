@@ -1,0 +1,10 @@
+node_modules/
+dist/
+src-tauri/target/
+*.key
+*.pem
+*.pfx
+.env
+.env.*
+test-output/
+release-output/
