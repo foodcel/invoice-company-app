@@ -9,12 +9,15 @@
     .gallery { max-width: 1700px; margin: auto; padding: 16px; }
     .app { --surface: #fffdfa; --panel: #fff; --bg: #f6f2eb; --ink: #23302c; --muted: #64726d; --border: #d9ded8; --accent: #226b5b; --accent-ink: #fff; --soft: #e9f3ec; --shadow: 0 12px 40px #2a39321a; background: var(--bg); color: var(--ink); border: 1px solid #c8cfca; border-radius: 22px; min-height: 775px; overflow: hidden; box-shadow: 0 16px 45px #303a3420; }
     .app.dark { --surface: #202b29; --panel: #24322e; --bg: #17201e; --ink: #f0f5f1; --muted: #b4c2ba; --border: #41544b; --accent: #97d7b8; --accent-ink: #173025; --soft: #314b3b; --shadow: 0 14px 44px #0005; color-scheme: dark; }
-    .app-top { min-height: 72px; padding: 13px 25px; display: flex; gap: 15px; align-items: center; justify-content: space-between; background: var(--surface); border-bottom: 1px solid var(--border); }
+    .app-top { min-height: 72px; padding: 13px 25px; display: flex; flex-wrap: wrap; gap: 10px 15px; align-items: center; justify-content: space-between; background: var(--surface); border-bottom: 1px solid var(--border); }
     .brand { display: flex; align-items: center; gap: 11px; min-width: 210px; }
     .brand-mark { width: 37px; height: 54px; flex: none; background: url("assets/business-card-image.png") -45px -15px / 129px 117px no-repeat; }
     .brand span { display: block; font-size: 12px; font-weight: 700; letter-spacing: .02em; line-height: 1.15; }
     .brand small { display: block; color: var(--muted); font-size: 11px; font-weight: 500; margin-top: 3px; }
     .top-tools { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+    .folder-tool { display: inline-flex; align-items: center; gap: 7px; margin-right: auto; white-space: nowrap; }
+    .folder-tool svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+    .folder-tool:hover { border-color: var(--accent); background: var(--soft); }
     .theme-button, .plain-button { border: 1px solid var(--border); background: var(--panel); color: var(--ink); border-radius: 10px; min-height: 40px; padding: 0 12px; font-weight: 600; }
     .theme-button { min-width: 105px; }
     .welcome { padding: 27px 32px 19px; }
@@ -224,6 +227,13 @@
     .v1 .preview-caption { font-size: 13px; margin-top: 12px; }
     .recent-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-start; justify-content: center; padding: min(7vh, 58px) 16px 16px; background: #15231dcc; }
     .recent-panel { width: min(610px, 100%); max-height: 84vh; display: flex; flex-direction: column; gap: 15px; overflow: hidden; padding: 20px; border-radius: 17px; background: var(--panel); color: var(--ink); box-shadow: 0 20px 70px #0005; }
+    .folder-panel { width: min(560px, 100%); }
+    .folder-current { display: grid; gap: 6px; padding: 13px 15px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
+    .folder-current strong { font-size: 13px; }
+    .folder-current span { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; user-select: text; }
+    .folder-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .folder-error { margin: 0; color: #ae3028; font-size: 13px; overflow-wrap: anywhere; }
+    .app.dark .folder-error { color: #ffaaa3; }
     .update-panel { width: min(430px, 100%); }
     .update-detail { min-height: 62px; color: var(--ink); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
     .update-detail p { margin: 0 0 9px; }

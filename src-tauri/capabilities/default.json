@@ -7,6 +7,7 @@
     "core:default",
     "updater:allow-check",
     "updater:allow-download-and-install",
-    "process:allow-restart"
+    "process:allow-restart",
+    "dialog:allow-open"
   ]
 }

@@ -80,6 +80,8 @@ pub struct StateResponse {
     pub current: Draft,
     pub records: Vec<Record>,
     pub next_invoice_number: u64,
+    pub pdf_directory: String,
+    pub using_default_directory: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -111,6 +113,8 @@ struct Store {
     generation: u64,
     current_id: String,
     next_invoice_number: u64,
+    #[serde(default)]
+    pdf_directory: Option<String>,
     records: Vec<Record>,
     versions: HashMap<String, Vec<Draft>>,
     pending_export: Option<PendingExport>,
@@ -150,6 +154,7 @@ impl Store {
             generation: 0,
             current_id: draft.id.clone(),
             next_invoice_number: FIRST_INVOICE_NUMBER,
+            pdf_directory: None,
             records: vec![Record {
                 id: draft.id.clone(),
                 draft,
@@ -179,7 +184,7 @@ impl Store {
         }
     }
 
-    fn response(&self) -> AppResult<StateResponse> {
+    fn response(&self, default_output_dir: &Path) -> AppResult<StateResponse> {
         let mut records = self.records.clone();
         records.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         let current = records
@@ -192,6 +197,8 @@ impl Store {
             current,
             records,
             next_invoice_number: self.next_invoice_number,
+            pdf_directory: self.pdf_directory.clone().unwrap_or_else(|| default_output_dir.to_string_lossy().into_owned()),
+            using_default_directory: self.pdf_directory.is_none(),
         })
     }
 }
@@ -217,6 +224,18 @@ impl Repository {
     }
     fn output_dir(&self) -> PathBuf {
         self.documents_dir.join("Entreprise").join("À classer")
+    }
+
+    fn selected_output_dir(&self, store: &Store) -> AppResult<PathBuf> {
+        if let Some(path) = &store.pdf_directory {
+            let dir = PathBuf::from(path);
+            if !dir.is_dir() {
+                return Err(format!("Le dossier des PDF n'est plus disponible : {path}. Choisissez un autre dossier."));
+            }
+            Ok(dir)
+        } else {
+            Ok(self.output_dir())
+        }
     }
 
     fn load(&self) -> AppResult<Store> {
@@ -257,7 +276,11 @@ impl Repository {
 
     fn reconcile_pending(&self, store: &mut Store) -> AppResult<()> {
         if let Some(pending) = store.pending_export.clone() {
-            let path = self.output_dir().join(&pending.filename);
+            let output_dir = match self.selected_output_dir(store) {
+                Ok(path) => path,
+                Err(_) => return Ok(()), // Keep an unfinished export until its chosen folder is available again.
+            };
+            let path = output_dir.join(&pending.filename);
             if file_matches_hash(&path, &pending.pdf_sha256) {
                 self.finalize_pending(store)?;
             } else {
@@ -271,7 +294,7 @@ impl Repository {
     fn load_state(&self) -> AppResult<StateResponse> {
         let mut store = self.load()?;
         self.reconcile_pending(&mut store)?;
-        store.response()
+        store.response(&self.output_dir())
     }
 
     fn save_draft(&self, draft: Draft) -> AppResult<StateResponse> {
@@ -279,7 +302,7 @@ impl Repository {
         self.reconcile_pending(&mut store)?;
         update_draft(&mut store, draft)?;
         self.commit(&mut store)?;
-        store.response()
+        store.response(&self.output_dir())
     }
 
     fn new_draft(&self, kind: Kind) -> AppResult<StateResponse> {
@@ -306,7 +329,7 @@ impl Repository {
             exports: vec![],
         });
         self.commit(&mut store)?;
-        store.response()
+        store.response(&self.output_dir())
     }
 
     fn open_draft(&self, id: &str) -> AppResult<StateResponse> {
@@ -315,7 +338,7 @@ impl Repository {
         store.index(id)?;
         store.current_id = id.to_string();
         self.commit(&mut store)?;
-        store.response()
+        store.response(&self.output_dir())
     }
 
     fn restore_previous(&self, id: &str) -> AppResult<StateResponse> {
@@ -346,7 +369,7 @@ impl Repository {
         }
         store.current_id = id.to_string();
         self.commit(&mut store)?;
-        store.response()
+        store.response(&self.output_dir())
     }
 
     fn set_next_invoice_number(&self, number: u64) -> AppResult<StateResponse> {
@@ -380,7 +403,30 @@ impl Repository {
         }
         store.next_invoice_number = number;
         self.commit(&mut store)?;
-        store.response()
+        store.response(&self.output_dir())
+    }
+
+    fn set_output_directory(&self, path: Option<String>) -> AppResult<StateResponse> {
+        let mut store = self.load()?;
+        self.reconcile_pending(&mut store)?;
+        if store.pending_export.is_some() {
+            return Err("Un PDF en attente doit être terminé dans son dossier actuel avant de changer de dossier.".into());
+        }
+        if let Some(selected) = &path {
+            let directory = Path::new(selected);
+            if selected.len() > 4096 || selected.contains('\0') || !directory.is_absolute() || !directory.is_dir() {
+                return Err("Choisissez un dossier existant et accessible sur cet ordinateur.".into());
+            }
+            let probe = directory.join(format!(".invoice-app-write-check-{}.tmp", Uuid::new_v4()));
+            let check = OpenOptions::new().write(true).create_new(true).open(&probe)
+                .map_err(|e| format!("Ce dossier n'accepte pas les PDF : {e}"))?;
+            drop(check);
+            fs::remove_file(&probe)
+                .map_err(|e| format!("Le test du dossier n'a pas pu être nettoyé : {e}"))?;
+        }
+        store.pdf_directory = path;
+        self.commit(&mut store)?;
+        store.response(&self.output_dir())
     }
 
     fn export_pdf(
@@ -396,6 +442,7 @@ impl Repository {
         validate_pdf(&pdf_bytes)?;
         validate_export_draft(&draft)?;
         let mut store = self.load()?;
+        let output_dir = self.selected_output_dir(&store)?;
         let index = store.index(&draft.id)?;
         let issued = store.records[index].draft.issued_number;
         if issued.is_some() && draft.kind != Kind::Facture {
@@ -418,7 +465,7 @@ impl Repository {
 
         // A prior write may have finished before the state commit. Complete it first.
         if let Some(pending) = store.pending_export.clone() {
-            let path = self.output_dir().join(&pending.filename);
+            let path = output_dir.join(&pending.filename);
             if file_matches_hash(&path, &pending.pdf_sha256) {
                 self.finalize_pending(&mut store)?;
                 if pending.id == draft.id
@@ -465,7 +512,7 @@ impl Repository {
             .issued_number
             .or((snapshot.kind == Kind::Facture).then_some(store.next_invoice_number));
         let base_name = base_filename(&snapshot, number, &language)?;
-        let filename = available_filename(&self.output_dir(), &base_name)?;
+        let filename = available_filename(&output_dir, &base_name)?;
         store.pending_export = Some(PendingExport {
             id: snapshot.id.clone(),
             filename: filename.clone(),
@@ -476,9 +523,10 @@ impl Repository {
             exported_at: Utc::now().to_rfc3339(),
         });
         self.commit(&mut store)?;
-        let output_dir = self.output_dir();
-        fs::create_dir_all(&output_dir)
-            .map_err(|e| format!("Impossible de créer le dossier de sortie : {e}"))?;
+        if store.pdf_directory.is_none() {
+            fs::create_dir_all(&output_dir)
+                .map_err(|e| format!("Impossible de créer le dossier de sortie : {e}"))?;
+        }
         let temp = output_dir.join(format!(".{}.tmp", Uuid::new_v4()));
         write_new_file(&temp, &pdf_bytes).map_err(|e| format!("PDF non enregistré : {e}"))?;
         let result = (|| -> AppResult<PathBuf> {
@@ -532,7 +580,7 @@ impl Repository {
             .pending_export
             .clone()
             .ok_or("Aucun export à terminer.")?;
-        let path = self.output_dir().join(&pending.filename);
+        let path = self.selected_output_dir(store)?.join(&pending.filename);
         if !file_matches_hash(&path, &pending.pdf_sha256) {
             return Err(
                 "Le PDF en attente est absent ou modifié; le numéro n'a pas été émis.".into(),
@@ -779,6 +827,11 @@ fn validate_store(store: &Store) -> AppResult<()> {
     {
         return Err("État des documents invalide.".into());
     }
+    if let Some(path) = &store.pdf_directory {
+        if path.len() > 4096 || path.contains('\0') || !Path::new(path).is_absolute() {
+            return Err("Dossier PDF personnalisé invalide.".into());
+        }
+    }
     let mut ids = HashSet::new();
     let mut issued = HashSet::new();
     for record in &store.records {
@@ -1024,6 +1077,15 @@ fn set_next_invoice_number(
 }
 
 #[tauri::command]
+fn set_output_directory(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+    path: Option<String>,
+) -> AppResult<StateResponse> {
+    with_repo(app, lock, |repo| repo.set_output_directory(path))
+}
+
+#[tauri::command]
 fn export_pdf(
     app: tauri::AppHandle,
     lock: tauri::State<'_, Mutex<()>>,
@@ -1039,6 +1101,7 @@ fn export_pdf(
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(Mutex::new(()))
@@ -1049,6 +1112,7 @@ pub fn run() {
             open_draft,
             restore_previous,
             set_next_invoice_number,
+            set_output_directory,
             export_pdf
         ])
         .run(tauri::generate_context!())
@@ -1355,5 +1419,81 @@ mod tests {
             1
         );
         assert!(repo.load().unwrap().pending_export.is_none());
+    }
+
+    #[test]
+    fn chosen_pdf_folder_persists_and_receives_invoice_without_overwriting() {
+        let (root, repo) = setup();
+        let chosen = root.path().join("Mes PDF");
+        fs::create_dir_all(&chosen).unwrap();
+        let chosen_text = chosen.to_string_lossy().into_owned();
+        let configured = repo.set_output_directory(Some(chosen_text.clone())).unwrap();
+        assert_eq!(configured.pdf_directory, chosen_text);
+        assert!(!configured.using_default_directory);
+        assert_eq!(repo.load_state().unwrap().pdf_directory, chosen_text);
+
+        let draft = ready_invoice(&repo);
+        let first = repo
+            .export_pdf(draft, PDF.to_vec(), Some(2060), "fr".into())
+            .unwrap();
+        assert!(Path::new(&first.path).starts_with(&chosen));
+        assert!(!repo.output_dir().exists());
+        let second = repo
+            .export_pdf(first.snapshot, PDF.to_vec(), Some(2060), "fr".into())
+            .unwrap();
+        assert!(Path::new(&second.path).starts_with(&chosen));
+        assert_ne!(first.path, second.path);
+        assert!(second.name_collision);
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 2061);
+
+        let reset = repo.set_output_directory(None).unwrap();
+        assert!(reset.using_default_directory);
+        assert_eq!(reset.pdf_directory, repo.output_dir().to_string_lossy());
+        assert!(Path::new(&first.path).exists());
+    }
+
+    #[test]
+    fn unavailable_chosen_folder_blocks_export_and_preserves_number() {
+        let (root, repo) = setup();
+        let chosen = root.path().join("PDF amovibles");
+        fs::create_dir_all(&chosen).unwrap();
+        let chosen_text = chosen.to_string_lossy().into_owned();
+        repo.set_output_directory(Some(chosen_text.clone())).unwrap();
+        let draft = ready_invoice(&repo);
+        fs::remove_dir(&chosen).unwrap();
+        let error = repo
+            .export_pdf(draft.clone(), PDF.to_vec(), Some(2060), "fr".into())
+            .unwrap_err();
+        assert!(error.contains("n'est plus disponible"));
+        let state = repo.load_state().unwrap();
+        assert_eq!(state.pdf_directory, chosen_text);
+        assert_eq!(state.next_invoice_number, 2060);
+        assert_eq!(state.current.issued_number, None);
+
+        assert!(repo.set_output_directory(Some("relative-folder".into())).is_err());
+        let other = root.path().join("Nouveau dossier");
+        fs::create_dir_all(&other).unwrap();
+        repo.set_output_directory(Some(other.to_string_lossy().into_owned())).unwrap();
+        let exported = repo
+            .export_pdf(draft, PDF.to_vec(), Some(2060), "fr".into())
+            .unwrap();
+        assert!(Path::new(&exported.path).starts_with(other));
+        assert_eq!(exported.snapshot.issued_number, Some(2060));
+    }
+
+    #[test]
+    fn existing_state_without_folder_setting_uses_original_default() {
+        let (_root, repo) = setup();
+        let original = repo.load_state().unwrap();
+        let mut legacy: serde_json::Value = serde_json::from_slice(&fs::read(repo.primary()).unwrap()).unwrap();
+        legacy.as_object_mut().unwrap().remove("pdfDirectory");
+        let bytes = serde_json::to_vec(&legacy).unwrap();
+        fs::write(repo.primary(), &bytes).unwrap();
+        fs::write(repo.backup(), &bytes).unwrap();
+        let reopened = repo.load_state().unwrap();
+        assert_eq!(reopened.current.id, original.current.id);
+        assert_eq!(reopened.next_invoice_number, original.next_invoice_number);
+        assert!(reopened.using_default_directory);
+        assert_eq!(reopened.pdf_directory, repo.output_dir().to_string_lossy());
     }
 }

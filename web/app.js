@@ -1,6 +1,7 @@
     import { invoke } from '@tauri-apps/api/core';
     import { check } from '@tauri-apps/plugin-updater';
     import { relaunch } from '@tauri-apps/plugin-process';
+    import { open as pickFolder } from '@tauri-apps/plugin-dialog';
     import { createPdf } from './pdf.js';
     import businessCardImage from './assets/business-card-image.png';
 
@@ -26,6 +27,11 @@
     let undoGroup = null;
     let records = [];
     let nextInvoiceNumber = null;
+    let pdfDirectory = '';
+    let usingDefaultDirectory = true;
+    let folderOpen = false;
+    let folderBusy = false;
+    let folderError = '';
     let loadError = null;
     let recentOpener = null;
     let updateOpen = false;
@@ -48,6 +54,8 @@
       if (!snapshot?.current || !Array.isArray(snapshot.records)) throw new Error('Réponse de stockage invalide.');
       records = snapshot.records;
       nextInvoiceNumber = snapshot.nextInvoiceNumber;
+      pdfDirectory = snapshot.pdfDirectory;
+      usingDefaultDirectory = snapshot.usingDefaultDirectory;
       if (replaceCurrent) state = copy(snapshot.current);
       else if (state?.id === snapshot.current.id) {
         state.invoiceNumber = snapshot.current.invoiceNumber;
@@ -264,6 +272,10 @@
       if (!recentOpen) return '';
       return `<div class="recent-backdrop"><div class="recent-panel" role="dialog" aria-modal="true" aria-labelledby="recent-title"><div class="recent-head"><h3 id="recent-title">Documents récents</h3><button type="button" data-close-recent aria-label="Fermer les documents récents" title="Fermer">✕</button></div><p class="recent-hint">Brouillons enregistrés sur cet ordinateur.</p><label for="recent-search">Rechercher un client ou un projet</label><input id="recent-search" data-recent-search type="search" value="${esc(recentQuery)}" placeholder="Nom du client ou du projet"><div class="recent-list" id="recent-list">${recentRows()}</div></div></div>`;
     }
+    function folderDialog() {
+      if (!folderOpen) return '';
+      return `<div class="recent-backdrop"><div class="recent-panel folder-panel" role="dialog" aria-modal="true" aria-labelledby="folder-title" aria-describedby="folder-help" tabindex="-1"><div class="recent-head"><h3 id="folder-title">Dossier des PDF</h3><button type="button" data-close-folder aria-label="Fermer le choix du dossier" title="Fermer" ${folderBusy ? 'disabled' : ''}>✕</button></div><p id="folder-help" class="recent-hint">Les soumissions et factures seront enregistrées ici avant l'impression ou lorsque vous créez un PDF.</p><div class="folder-current"><strong>Dossier actuel${usingDefaultDirectory ? ' · par défaut' : ''}</strong><span>${esc(pdfDirectory)}</span></div>${folderError ? `<p class="folder-error" role="alert">${esc(folderError)}</p>` : ''}<div class="folder-actions"><button type="button" class="primary" data-choose-folder ${folderBusy ? 'disabled' : ''}>Choisir un dossier…</button><button type="button" class="plain-button" data-default-folder ${folderBusy || usingDefaultDirectory ? 'disabled' : ''}>Revenir au dossier par défaut</button></div></div></div>`;
+    }
     function invoiceNumberControl() {
       if (state.kind !== 'facture') return '';
       const issued = Boolean(state.issuedNumber);
@@ -290,7 +302,7 @@
         return;
       }
       app.className = `app v1 ${theme === 'dark' ? 'dark' : ''}`;
-      app.innerHTML = `<header class="app-top"><div class="brand"><div class="brand-mark" aria-hidden="true"></div><span>Ébénisterie de l'Hermitage inc.<small>Soumissions et factures</small></span></div><div class="top-tools"><button type="button" class="plain-button" data-recent>Documents récents</button><button type="button" class="plain-button" data-check-update>Vérifier les mises à jour</button><button type="button" class="theme-button" data-theme>${theme === 'dark' ? '☀ Mode clair' : '☾ Mode sombre'}</button></div></header>
+      app.innerHTML = `<header class="app-top"><div class="brand"><div class="brand-mark" aria-hidden="true"></div><span>Ébénisterie de l'Hermitage inc.<small>Soumissions et factures</small></span></div><button type="button" class="plain-button folder-tool" data-folder title="Changer le dossier des PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3z"/></svg>Dossier des PDF</button><div class="top-tools"><button type="button" class="plain-button" data-recent>Documents récents</button><button type="button" class="plain-button" data-check-update>Vérifier les mises à jour</button><button type="button" class="theme-button" data-theme>${theme === 'dark' ? '☀ Mode clair' : '☾ Mode sombre'}</button></div></header>
         <div class="welcome"><p class="eyebrow">${design.title}</p><h2>Que voulez-vous préparer aujourd'hui&nbsp;?</h2><p>${design.subtitle}</p></div>
         <div class="choice-row"><button type="button" class="choice ${state.kind === 'soumission' ? 'active' : ''}" data-kind="soumission" aria-pressed="${state.kind === 'soumission'}"><span class="choice-icon">S</span><span><strong>Soumission</strong><small>Préparer un prix pour un client</small></span></button><button type="button" class="choice ${state.kind === 'facture' ? 'active' : ''}" data-kind="facture" aria-pressed="${state.kind === 'facture'}"><span class="choice-icon">F</span><span><strong>Facture</strong><small>Facturer un travail ou un produit</small></span></button></div>
         <div class="workbench">
@@ -321,8 +333,8 @@
             <div class="language-action"><div><strong>Copie pour le client · Français</strong><small>Traduction anglaise : bientôt disponible.</small></div><button type="button" class="plain-button" data-translate disabled aria-label="Traduire en anglais — bientôt disponible" title="Traduction bientôt disponible">Traduire en anglais</button></div>
           </div>
           <div class="actions"><button type="button" class="primary" data-pdf>Créer le PDF</button><button type="button" class="print-button" data-print>Imprimer</button></div><p class="output-status" role="status" aria-live="polite">${esc(outputStatus)}</p>
-        </section><aside class="preview">${preview()}</aside></div>${recentDialog()}${updateDialog()}`;
-      app.querySelectorAll('.app-top, .welcome, .choice-row, .workbench').forEach(el => { el.inert = recentOpen || updateOpen; });
+        </section><aside class="preview">${preview()}</aside></div>${recentDialog()}${updateDialog()}${folderDialog()}`;
+      app.querySelectorAll('.app-top, .welcome, .choice-row, .workbench').forEach(el => { el.inert = recentOpen || updateOpen || folderOpen; });
       sync();
       fitTextareas(app);
       paintValidation();
@@ -358,7 +370,7 @@
       busy = active;
       const workbench = document.querySelector('.workbench');
       if (workbench) {
-        workbench.inert = active || recentOpen || updateOpen;
+        workbench.inert = active || recentOpen || updateOpen || folderOpen;
         workbench.setAttribute('aria-busy', String(active));
       }
     }
@@ -394,7 +406,7 @@
           ? ` Le numéro ${state.invoiceNumber} sera confirmé et le suivant sera proposé pour la prochaine facture.`
           : '';
         const copyMessage = alreadyExported ? ' Une copie précédente sera conservée.' : '';
-        if (!confirm(`Avant d'imprimer, l'application enregistrera ${alreadyExported ? 'une nouvelle copie du PDF' : 'le PDF'} dans Documents > Entreprise > À classer.${numberMessage}${copyMessage} Continuer ?`)) return;
+        if (!confirm(`Avant d'imprimer, l'application enregistrera ${alreadyExported ? 'une nouvelle copie du PDF' : 'le PDF'} dans :\n${pdfDirectory}.${numberMessage}${copyMessage} Continuer ?`)) return;
       } else if (alreadyExported && !confirm('Ce document a déjà été enregistré en PDF. Créer une autre copie avec le même numéro de facture, si applicable ? Le fichier précédent sera conservé.')) {
         return;
       }
@@ -454,6 +466,42 @@
       numberConfirm = null;
       render();
       (recentOpener && document.contains(recentOpener) ? recentOpener : document.querySelector('[data-recent]'))?.focus();
+    }
+    function closeFolder() {
+      if (folderBusy) return;
+      folderOpen = false;
+      folderError = '';
+      render();
+      document.querySelector('[data-folder]')?.focus();
+    }
+    async function chooseFolder(useDefault = false) {
+      if (folderBusy) return;
+      folderError = '';
+      let path = null;
+      if (!useDefault) {
+        try { path = await pickFolder({ directory: true, multiple: false, defaultPath: pdfDirectory || undefined, title: 'Choisir le dossier des PDF' }); }
+        catch {
+          try { path = await pickFolder({ directory: true, multiple: false, title: 'Choisir le dossier des PDF' }); }
+          catch (error) { folderError = `Impossible d'ouvrir le choix du dossier : ${errorText(error)}`; render(); return; }
+        }
+        if (path === null) return;
+        if (typeof path !== 'string' || !path.trim()) { folderError = 'Le dossier choisi est invalide.'; render(); return; }
+      }
+      folderBusy = true;
+      render();
+      try {
+        const snapshot = await runCommand('set_output_directory', { path });
+        applySnapshot(snapshot, false);
+        folderOpen = false;
+        folderError = '';
+        notice(usingDefaultDirectory ? 'Dossier des PDF par défaut rétabli.' : `Les prochains PDF seront enregistrés dans : ${pdfDirectory}`);
+      } catch (error) {
+        folderError = `Dossier inchangé : ${errorText(error)}`;
+      } finally {
+        folderBusy = false;
+        render();
+        document.querySelector(folderOpen ? '[data-choose-folder]' : '[data-folder]')?.focus();
+      }
     }
     async function releaseUpdate(update) {
       try { await update?.close?.(); } catch { /* The installer may already have released it. */ }
@@ -571,6 +619,16 @@
         render();
         return;
       }
+      if (b.hasAttribute('data-folder')) {
+        folderError = '';
+        folderOpen = true;
+        render();
+        document.querySelector('.folder-panel [data-choose-folder]')?.focus();
+        return;
+      }
+      if (b.hasAttribute('data-close-folder')) { closeFolder(); return; }
+      if (b.hasAttribute('data-choose-folder')) { await chooseFolder(); return; }
+      if (b.hasAttribute('data-default-folder')) { await chooseFolder(true); return; }
       if (b.hasAttribute('data-recent')) {
         if (!await flushChanges()) return;
         recentOpener = b;
@@ -736,10 +794,11 @@
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
         return;
       }
+       if (event.key === 'Escape' && folderOpen) { closeFolder(); return; }
        if (event.key === 'Escape' && updateOpen) { closeUpdate(); return; }
        if (event.key === 'Escape' && recentOpen) { closeRecent(); return; }
-       if (event.key === 'Tab' && (recentOpen || updateOpen)) {
-         const dialog = document.querySelector(updateOpen ? '.update-panel' : '.recent-panel');
+       if (event.key === 'Tab' && (recentOpen || updateOpen || folderOpen)) {
+         const dialog = document.querySelector(folderOpen ? '.folder-panel' : updateOpen ? '.update-panel' : '.recent-panel');
         const focusable = Array.from(dialog?.querySelectorAll('button:not(:disabled), input:not(:disabled)') || []);
         if (!focusable.length) return;
         const first = focusable[0], last = focusable[focusable.length - 1];
