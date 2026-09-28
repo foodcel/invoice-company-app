@@ -24,6 +24,7 @@ scripts\package-release.ps1 -SkipBuild
 
 The per-user NSIS installer is written under `src-tauri\target\release\bundle\nsis\`. Dad's PC does not need Node, Rust, or a terminal. It needs a supported x64 Windows version and WebView2; the installer can acquire WebView2 when internet access is available.
 The package script places the installer, its updater signature, and `latest.json` together in `release-output\v<version>\` for a GitHub Release with the same `v<version>` tag. Omit `-SkipBuild` when packaging a new code version.
+After reviewing those files, run `scripts\publish-release.ps1` on a PC signed in to GitHub. It uploads the three files as a draft and publishes the release only after all uploads succeed. It never replaces an existing release.
 
 ## Data, backup, and updates
 
