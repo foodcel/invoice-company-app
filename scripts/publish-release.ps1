@@ -27,7 +27,11 @@ try {
     if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw }
 }
 
-$notes = if ($version -eq '0.1.0') { 'First Windows release. French quotations and invoices with local drafts, Letter PDFs, printing, and signed update support.' } else { "Windows release $tag. Signed update package for existing installations." }
+$notes = if ($version -eq '0.1.0') {
+    'First Windows release. French quotations and invoices with local drafts, Letter PDFs, printing, and signed update support.'
+} elseif ($version -eq '0.1.5') {
+    'English customer copies with review and separate PDFs; OpenAI or Z.ai settings; work-line dictation and AI wording proposals; document dictation that fills fields during recording. A general API key, internet connection, and microphone permission are required for AI features. Please review AI-filled text and numbers before sending documents.'
+} else { "Windows release $tag. Signed update package for existing installations." }
 $body = @{ tag_name = $tag; target_commitish = 'main'; name = "Soumissions et factures $tag"; body = $notes; draft = $true; prerelease = $false } | ConvertTo-Json -Compress
 $release = Invoke-RestMethod -Method Post -Uri "$api/releases" -Headers $headers -ContentType 'application/json' -Body $body
 $uploadBase = ($release.upload_url -replace '\{.*$', '')

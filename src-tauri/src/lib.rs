@@ -12,6 +12,8 @@ use std::{
 use tauri::Manager;
 use uuid::Uuid;
 
+mod ai;
+
 type AppResult<T> = Result<T, String>;
 const FIRST_INVOICE_NUMBER: u64 = 2060;
 const MAX_INVOICE_NUMBER: u64 = 9_007_199_254_740_990;
@@ -34,6 +36,18 @@ pub struct Item {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct EnglishCopy {
+    pub source_project: String,
+    pub source_notes: String,
+    pub source_descriptions: Vec<String>,
+    pub project: String,
+    pub notes: String,
+    pub descriptions: Vec<String>,
+    pub reviewed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Draft {
     pub id: String,
     pub kind: Kind,
@@ -49,6 +63,8 @@ pub struct Draft {
     pub notes: String,
     pub deposit: String,
     pub items: Vec<Item>,
+    #[serde(default)]
+    pub english_copy: Option<EnglishCopy>,
     #[serde(default)]
     pub invoice_number: Option<u64>,
     #[serde(default)]
@@ -86,6 +102,24 @@ pub struct StateResponse {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AiSettings {
+    provider: String,
+    openai_configured: bool,
+    zai_configured: bool,
+}
+
+fn default_ai_provider() -> String { "openai".into() }
+
+fn ai_settings(provider: String) -> AppResult<AiSettings> {
+    Ok(AiSettings {
+        provider,
+        openai_configured: ai::has_key("openai")?,
+        zai_configured: ai::has_key("zai")?,
+    })
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExportResponse {
     pub path: String,
     pub filename: String,
@@ -113,6 +147,8 @@ struct Store {
     generation: u64,
     current_id: String,
     next_invoice_number: u64,
+    #[serde(default = "default_ai_provider")]
+    ai_provider: String,
     #[serde(default)]
     pdf_directory: Option<String>,
     records: Vec<Record>,
@@ -141,6 +177,7 @@ fn blank_draft(kind: Kind) -> Draft {
             quantity: "1".into(),
             price: String::new(),
         }],
+        english_copy: None,
         invoice_number: (kind == Kind::Facture).then_some(FIRST_INVOICE_NUMBER),
         issued_number: None,
     }
@@ -154,6 +191,7 @@ impl Store {
             generation: 0,
             current_id: draft.id.clone(),
             next_invoice_number: FIRST_INVOICE_NUMBER,
+            ai_provider: default_ai_provider(),
             pdf_directory: None,
             records: vec![Record {
                 id: draft.id.clone(),
@@ -441,6 +479,9 @@ impl Repository {
         }
         validate_pdf(&pdf_bytes)?;
         validate_export_draft(&draft)?;
+        if language == "en" {
+            validate_english_copy(&draft)?;
+        }
         let mut store = self.load()?;
         let output_dir = self.selected_output_dir(&store)?;
         let index = store.index(&draft.id)?;
@@ -708,6 +749,49 @@ fn validate_draft(draft: &Draft) -> AppResult<()> {
             return Err("Une ligne contient un caractère invalide.".into());
         }
     }
+    if let Some(copy) = &draft.english_copy {
+        if copy.source_project.len() > 500
+            || copy.project.len() > 500
+            || copy.source_notes.len() > 50_000
+            || copy.notes.len() > 50_000
+            || copy.source_descriptions.len() > 500
+            || copy.descriptions.len() > 500
+            || copy.source_descriptions.iter().any(|text| text.len() > 20_000)
+            || copy.descriptions.iter().any(|text| text.len() > 20_000)
+            || [&copy.source_project, &copy.project, &copy.source_notes, &copy.notes]
+                .into_iter()
+                .chain(copy.source_descriptions.iter())
+                .chain(copy.descriptions.iter())
+                .any(|text| text.chars().any(|ch| ch == '\0' || (ch.is_control() && ch != '\n' && ch != '\r' && ch != '\t')))
+        {
+            return Err("Copie anglaise trop longue ou contenant un caractère invalide.".into());
+        }
+    }
+    Ok(())
+}
+
+fn validate_english_copy(draft: &Draft) -> AppResult<()> {
+    let copy = draft.english_copy.as_ref().ok_or("Créez et vérifiez la copie anglaise avant l'export.")?;
+    if !copy.reviewed {
+        return Err("Vérifiez et acceptez la copie anglaise avant l'export.".into());
+    }
+    if copy.source_project != draft.project
+        || copy.source_notes != draft.notes
+        || copy.source_descriptions != draft.items.iter().map(|item| item.description.clone()).collect::<Vec<_>>()
+    {
+        return Err("La version française a changé. Vérifiez à nouveau la copie anglaise.".into());
+    }
+    if copy.descriptions.len() != draft.items.len()
+        || copy.descriptions.iter().any(|text| text.trim().is_empty())
+    {
+        return Err("Une description manque dans la copie anglaise.".into());
+    }
+    if !draft.project.trim().is_empty() && copy.project.trim().is_empty() {
+        return Err("Le nom du projet manque dans la copie anglaise.".into());
+    }
+    if !draft.notes.trim().is_empty() && copy.notes.trim().is_empty() {
+        return Err("La note manque dans la copie anglaise.".into());
+    }
     Ok(())
 }
 
@@ -819,6 +903,9 @@ fn available_filename(dir: &Path, base: &str) -> AppResult<String> {
 fn validate_store(store: &Store) -> AppResult<()> {
     if store.schema_version != 1 {
         return Err("Version de données inconnue; aucune donnée n'a été écrasée.".into());
+    }
+    if store.ai_provider != "openai" && store.ai_provider != "zai" {
+        return Err("Service IA inconnu; les données locales n'ont pas été écrasées.".into());
     }
     if store.next_invoice_number == 0
         || store.next_invoice_number > MAX_INVOICE_NUMBER + 1
@@ -1086,6 +1173,95 @@ fn set_output_directory(
 }
 
 #[tauri::command]
+fn get_ai_settings(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+) -> AppResult<AiSettings> {
+    let provider = with_repo(app, lock, |repo| Ok(repo.load()?.ai_provider))?;
+    ai_settings(provider)
+}
+
+#[tauri::command]
+fn set_ai_provider(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+    provider: String,
+) -> AppResult<AiSettings> {
+    if provider != "openai" && provider != "zai" { return Err("Service IA invalide.".into()); }
+    let selected = with_repo(app, lock, |repo| {
+        let mut store = repo.load()?;
+        store.ai_provider = provider;
+        repo.commit(&mut store)?;
+        Ok(store.ai_provider)
+    })?;
+    ai_settings(selected)
+}
+
+#[tauri::command]
+fn set_ai_key(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+    provider: String,
+    key: Option<String>,
+) -> AppResult<AiSettings> {
+    ai::set_key(&provider, key.as_deref())?;
+    let selected = with_repo(app, lock, |repo| Ok(repo.load()?.ai_provider))?;
+    ai_settings(selected)
+}
+
+#[tauri::command]
+async fn ai_translate_english(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+    draft: Draft,
+) -> AppResult<ai::TranslatedText> {
+    validate_draft(&draft)?;
+    let provider = with_repo(app, lock, |repo| {
+        let store = repo.load()?;
+        let index = store.index(&draft.id)?;
+        if store.records[index].draft != draft {
+            return Err("Le brouillon a changé. Enregistrez-le et réessayez la traduction.".into());
+        }
+        Ok(store.ai_provider)
+    })?;
+    ai::translate(&provider, &draft.project, &draft.notes,
+        &draft.items.iter().map(|item| item.description.clone()).collect::<Vec<_>>()).await
+}
+
+#[tauri::command]
+async fn ai_transcribe_audio(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+    audio_bytes: Vec<u8>,
+) -> AppResult<String> {
+    // Read the chosen provider before awaiting the network; do not hold the state lock.
+    let provider = with_repo(app, lock, |repo| Ok(repo.load()?.ai_provider))?;
+    ai::transcribe(&provider, audio_bytes).await
+}
+
+#[tauri::command]
+async fn ai_rewrite_line(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+    source: String,
+    style: String,
+    variation: u32,
+) -> AppResult<String> {
+    let provider = with_repo(app, lock, |repo| Ok(repo.load()?.ai_provider))?;
+    ai::rewrite_line(&provider, &source, &style, variation).await
+}
+
+#[tauri::command]
+async fn ai_extract_document(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+    transcript: String,
+) -> AppResult<ai::VoiceUpdate> {
+    let provider = with_repo(app, lock, |repo| Ok(repo.load()?.ai_provider))?;
+    ai::extract_document(&provider, &transcript).await
+}
+
+#[tauri::command]
 fn export_pdf(
     app: tauri::AppHandle,
     lock: tauri::State<'_, Mutex<()>>,
@@ -1113,6 +1289,13 @@ pub fn run() {
             restore_previous,
             set_next_invoice_number,
             set_output_directory,
+            get_ai_settings,
+            set_ai_provider,
+            set_ai_key,
+            ai_translate_english,
+            ai_transcribe_audio,
+            ai_rewrite_line,
+            ai_extract_document,
             export_pdf
         ])
         .run(tauri::generate_context!())
@@ -1208,6 +1391,54 @@ mod tests {
             Some(2061)
         );
         assert_eq!(repo.load_state().unwrap().next_invoice_number, 2061);
+    }
+
+    #[test]
+    fn reviewed_english_copy_survives_reopen_and_shares_one_invoice_number() {
+        let (_temp, repo) = setup();
+        let mut draft = ready_invoice(&repo);
+        draft.project = "Escalier".into();
+        draft.notes = "Installation incluse".into();
+        draft.english_copy = Some(EnglishCopy {
+            source_project: draft.project.clone(),
+            source_notes: draft.notes.clone(),
+            source_descriptions: vec![draft.items[0].description.clone()],
+            project: "Staircase".into(),
+            notes: "Installation included".into(),
+            descriptions: vec!["Work".into()],
+            reviewed: true,
+        });
+        repo.save_draft(draft.clone()).unwrap();
+        let reopened = repo.load_state().unwrap().current;
+        assert_eq!(reopened.items[0].description, "Travail");
+        assert_eq!(reopened.english_copy.as_ref().unwrap().descriptions[0], "Work");
+        let en = repo.export_pdf(reopened, PDF.to_vec(), Some(2060), "en".into()).unwrap();
+        assert!(en.filename.contains("_EN.pdf"));
+        assert_eq!(en.snapshot.items[0].description, "Travail");
+        assert_eq!(en.snapshot.issued_number, Some(2060));
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 2061);
+        let fr = repo.export_pdf(en.snapshot, PDF.to_vec(), Some(2060), "fr".into()).unwrap();
+        assert_eq!(fr.invoice_number, Some(2060));
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 2061);
+        assert!(repo.backup().exists());
+    }
+
+    #[test]
+    fn english_export_requires_current_review_and_keeps_unissued_number_on_failure() {
+        let (_temp, repo) = setup();
+        let mut draft = ready_invoice(&repo);
+        assert!(repo.export_pdf(draft.clone(), PDF.to_vec(), Some(2060), "en".into()).is_err());
+        draft.english_copy = Some(EnglishCopy {
+            source_project: draft.project.clone(), source_notes: draft.notes.clone(),
+            source_descriptions: vec![draft.items[0].description.clone()],
+            project: String::new(), notes: String::new(), descriptions: vec!["Work".into()],
+            reviewed: false,
+        });
+        assert!(repo.export_pdf(draft.clone(), PDF.to_vec(), Some(2060), "en".into()).is_err());
+        draft.english_copy.as_mut().unwrap().reviewed = true;
+        draft.items[0].description = "Travail modifié".into();
+        assert!(repo.export_pdf(draft, PDF.to_vec(), Some(2060), "en".into()).is_err());
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 2060);
     }
 
     #[test]

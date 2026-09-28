@@ -1,6 +1,6 @@
 # Soumissions et factures
 
-Windows application for Ébénisterie de l'Hermitage inc. to prepare French quotations and invoices. The first release focuses on manual entry. Voice dictation, AI rewriting, and English translation are visibly unavailable until they can be implemented and reviewed.
+Windows application for Ébénisterie de l'Hermitage inc. to prepare quotations and invoices. Manual entry works without an AI service. A reviewed English customer copy can be saved beside each French draft and exported as a separate PDF. With a configured general API key, the app can transcribe and improve one work line or fill document fields from speech.
 
 The Windows icon is the approved **Document** concept (`src-tauri/icons/icon-source.svg`). To regenerate its Windows assets after editing that source, run `npm run tauri -- icon src-tauri/icons/icon-source.svg` and retain `icon.png` and `icon.ico` in `src-tauri/icons`.
 
@@ -10,6 +10,14 @@ The Windows icon is the approved **Document** concept (`src-tauri/icons/icon-sou
 2. Choose **Soumission** or **Facture**, enter the customer and work details, and review the page on the right.
 3. The form saves automatically; **Enregistrer le brouillon** saves immediately. **Documents récents** reopens earlier work.
 4. Choose **Créer le PDF** to save a customer copy in `Documents\Entreprise\À classer`. Use **Dossier des PDF** in the top bar to choose a different folder or return to the default. The choice is remembered after closing the app and applies to both PDF and Print. **Imprimer** first explains where it will save the PDF, then opens Windows printing. The PDF name uses the customer's name and the invoice number when applicable. If a PDF with the same name exists, the app keeps it and tells you the new copy's name.
+
+For an English-speaking customer, open **Réglages IA** and select OpenAI or Z.ai, then enter a **general API key** for that provider. The key is stored in Windows Credential Manager, separately from document data and PDFs. A Codex subscription or Z.ai Coding Plan key may not be authorized for this general business API. The app never switches providers automatically. You can continue creating French documents if there is no key or no internet connection.
+
+After completing the French text, click **Traduire en anglais**. The app sends only the project name, work descriptions, and client notes to the selected provider. Review and edit the proposed English copy, then click **Confirmer cette copie**. It is saved with the original document, can be reopened from **Documents récents**, and displays an English preview. **Créer le PDF** or **Imprimer** while viewing English uses the same invoice number and numeric fields as the French document; the PDF name includes `_EN`. A later French text change makes the English copy out of date and blocks English export until it is refreshed and confirmed again. French draft entry and French PDF export never require AI.
+
+The small microphone on a work line records that line only. Press it again to finish; the app transcribes the recording and proposes a cleaner description. **Texte clair**, **Liste à puces**, and **Autre version** request AI alternatives. You can edit the proposal, **Accepter** it, or use the X to keep the original. The small stars button proposes improvements for a typed line. Neither action changes the saved description before acceptance.
+
+The microphone in the document header fills the document while you speak. It sends consecutive short audio segments to the selected provider and adds recognized fields after each segment is processed. Press the microphone again to stop, then check every field and price. Existing filled fields are protected, and manual corrections made during dictation are retained. If analysis fails after speech was recognized, the words remain visible for retry or copying. The app saves recognized changes as a draft; dictation never creates a PDF or issues an invoice number. Audio is not saved as a local file, but segments and recognized text are sent to the chosen provider. An internet connection, microphone permission, and a working general API key are required.
 
 The next invoice number starts at **2060**. Saving a draft does not issue a number. The first successful PDF export of an invoice fixes its number; later saves and exports of that invoice keep it. Use **Modifier le n°** beside the displayed invoice number to change the next unissued number; an issued invoice cannot be renumbered.
 
@@ -37,3 +45,5 @@ After reviewing those files, run `scripts\publish-release.ps1` on a PC signed in
 - Increasing the version in both `package.json` and `src-tauri/tauri.conf.json`, building with the same key, and publishing the installer, `.sig`, and generated `latest.json` are necessary for each update. See `docs/tauri-windows-delivery.md` for the delivery details.
 
 The first installation and updates should be exercised on Dad's actual PC before relying on them for business records. Keep an independent copy of the app's data folder and exported PDFs as part of the normal computer backup.
+
+The API integration has been checked against provider documentation and local response fixtures. It has not been exercised with a real key or microphone on this PC, so successful live AI and voice calls still require a configured account and an end-to-end check. AI translations and work-line rewrites remain proposals until a person confirms them. Dictated document fields are saved as they are recognized and must be reviewed before a customer PDF is created.

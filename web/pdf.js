@@ -23,13 +23,45 @@ const muted = rgb(0.39, 0.44, 0.41);
 const rule = rgb(0.84, 0.88, 0.85);
 
 const LABELS = {
-  soumission: {
-    title: 'Soumission', party: 'Proposition pour', date: 'Valide jusqu’au',
-    deposit: 'Dépôt demandé', balance: 'Solde après dépôt',
+  fr: {
+    common: {
+      project: 'PROJET', documentDate: 'DATE DU DOCUMENT', billingAddress: 'Adresse de facturation',
+      clientPhone: 'Téléphone du client', clientEmail: 'Courriel du client', shipTo: 'Livrer à',
+      issuedBy: 'Émis par', phone: 'Tél.', email: 'Courriel :',
+      description: 'DESCRIPTION', quantity: 'QTÉ', unitPrice: 'PRIX UNITAIRE', amount: 'MONTANT',
+      line: 'LIGNE', continued: 'SUITE', subtotal: 'Sous-total',
+      gst: 'TPS (5 %)', qst: 'TVQ (9,975 %)', total: 'Total avec taxes',
+      note: 'NOTE POUR LE CLIENT', noDate: 'Aucune', invoiceNumber: 'Facture n°',
+      gstId: 'TPS', qstId: 'TVQ', subject: 'Document client',
+    },
+    soumission: {
+      title: 'Soumission', party: 'Proposition pour', date: 'Valide jusqu’au',
+      deposit: 'Dépôt demandé', balance: 'Solde après dépôt',
+    },
+    facture: {
+      title: 'Facture', party: 'Facturé à', date: 'Date limite de paiement',
+      deposit: 'Dépôt reçu', balance: 'Solde à payer',
+    },
   },
-  facture: {
-    title: 'Facture', party: 'Facturé à', date: 'Date limite de paiement',
-    deposit: 'Dépôt reçu', balance: 'Solde à payer',
+  en: {
+    common: {
+      project: 'PROJECT', documentDate: 'DOCUMENT DATE', billingAddress: 'Billing address',
+      clientPhone: 'Client phone', clientEmail: 'Client email', shipTo: 'Ship to',
+      issuedBy: 'Issued by', phone: 'Phone', email: 'Email:',
+      description: 'DESCRIPTION', quantity: 'QTY', unitPrice: 'UNIT PRICE', amount: 'AMOUNT',
+      line: 'LINE', continued: 'CONTINUED', subtotal: 'Subtotal',
+      gst: 'GST (5%)', qst: 'QST (9.975%)', total: 'Total incl. tax',
+      note: 'NOTE FOR CUSTOMER', noDate: 'None', invoiceNumber: 'Invoice no.',
+      gstId: 'GST', qstId: 'QST', subject: 'Customer document',
+    },
+    soumission: {
+      title: 'Quote', party: 'Prepared for', date: 'Valid until',
+      deposit: 'Deposit requested', balance: 'Balance after deposit',
+    },
+    facture: {
+      title: 'Invoice', party: 'Bill to', date: 'Payment due',
+      deposit: 'Deposit received', balance: 'Balance due',
+    },
   },
 };
 
@@ -58,8 +90,8 @@ function requiredText(value, label) {
   return text;
 }
 
-function displayDate(value, required = true) {
-  if (!value && !required) return 'Aucune';
+function displayDate(value, required = true, language = 'fr') {
+  if (!value && !required) return LABELS[language].common.noDate;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? ''));
   if (!match) throw new Error('Date invalide pour le PDF.');
   const [, year, month, day] = match;
@@ -67,7 +99,7 @@ function displayDate(value, required = true) {
   if (date.getUTCFullYear() !== +year || date.getUTCMonth() + 1 !== +month || date.getUTCDate() !== +day) {
     throw new Error('Date invalide pour le PDF.');
   }
-  return `${day}/${month}/${year}`;
+  return language === 'en' ? `${year}-${month}-${day}` : `${day}/${month}/${year}`;
 }
 
 function readItems(draft) {
@@ -101,7 +133,7 @@ export function calculateTotals(draft) {
   });
 }
 
-const money = value => new Intl.NumberFormat('fr-CA', {
+const money = (value, language = 'fr') => new Intl.NumberFormat(language === 'en' ? 'en-CA' : 'fr-CA', {
   style: 'currency', currency: 'CAD', minimumFractionDigits: 2,
 }).format(value);
 
@@ -208,12 +240,14 @@ function drawHeader(page, context, first) {
     drawText(page, 'ÉBÉNISTERIE', 112, 53, bold, 17, brown);
     drawText(page, "DE L'HERMITAGE INC.", 112, 77, bold, 10, brown);
     drawRight(page, labels.title, RIGHT, 49, bold, 28);
-    if (number !== null) drawRight(page, `Facture n° ${number}`, RIGHT, 91, normal, 10, muted);
+    if (number !== null) drawRight(page, `${labels.invoiceNumber} ${number}`, RIGHT, 91, normal, 10, muted);
     drawRule(page, 134, LEFT, RIGHT, brown, 1.7);
     return 151;
   }
   drawText(page, "Ébénisterie de l'Hermitage inc.", LEFT, 42, bold, 11, brown);
-  drawRight(page, number === null ? `${labels.title} · suite` : `${labels.title} n° ${number} · suite`, RIGHT, 42, normal, 10, muted);
+  drawRight(page, number === null ? `${labels.title} · ${labels.continued.toLowerCase()}` :
+    `${labels.invoiceNumber} ${number} · ${labels.continued.toLowerCase()}`,
+    RIGHT, 42, normal, 10, muted);
   drawRule(page, 65, LEFT, RIGHT, brown, 1.2);
   return 82;
 }
@@ -222,23 +256,24 @@ function drawSummary(page, draft, context, top) {
   const { normal, bold, labels } = context;
   const project = String(draft.project ?? '').trim();
   const projectLines = project ? wrapText(project, bold, 12, 246) : [];
-  drawText(page, 'PROJET', LEFT, top, bold, 9, brown);
+  drawText(page, labels.project, LEFT, top, bold, 9, brown);
   drawLines(page, projectLines, LEFT, top + 17, bold, 12, 15);
-  drawText(page, 'DATE DU DOCUMENT', 316, top, bold, 9, brown);
-  drawText(page, displayDate(draft.date), 316, top + 18, bold, 11);
+  drawText(page, labels.documentDate, 316, top, bold, 9, brown);
+  drawText(page, displayDate(draft.date, true, context.language), 316, top + 18, bold, 11);
   drawText(page, labels.date.toUpperCase(), 435, top, bold, 8.2, brown);
-  drawText(page, displayDate(context.kind === 'facture' ? draft.dueDate : draft.validUntil, context.kind !== 'facture'), 435, top + 18, bold, 11);
+  drawText(page, displayDate(context.kind === 'facture' ? draft.dueDate : draft.validUntil,
+    context.kind !== 'facture', context.language), 435, top + 18, bold, 11);
   const bottom = top + Math.max(46, 22 + projectLines.length * 15);
   drawRule(page, bottom);
   return bottom + 17;
 }
 
 function partyContent(draft, context) {
-  const { normal, bold } = context;
+  const { normal, bold, labels } = context;
   const client = wrapText(draft.client, bold, 12, 225);
   const address = wrapText(draft.address, normal, 10, 225);
-  const contact = draft.contact?.trim() ? wrapText(`Tél. ${draft.contact}`, normal, 10, 225) : [];
-  const email = draft.email?.trim() ? wrapText(`Courriel : ${draft.email}`, normal, 10, 225) : [];
+  const contact = draft.contact?.trim() ? wrapText(`${labels.phone} ${draft.contact}`, normal, 10, 225) : [];
+  const email = draft.email?.trim() ? wrapText(`${labels.email} ${draft.email}`, normal, 10, 225) : [];
   const ship = draft.shipTo?.trim() ? wrapText(draft.shipTo, normal, 10, 225) : [];
   return { client, address, contact, email, ship };
 }
@@ -271,11 +306,11 @@ function drawParties(page, draft, context, top) {
   if (info.ship.length) {
     drawRule(page, y + 5, leftX + 13, leftX + width - 13);
     y += 14;
-    drawText(page, 'LIVRER À', leftX + 13, y, bold, 9, brown);
+    drawText(page, labels.shipTo.toUpperCase(), leftX + 13, y, bold, 9, brown);
     y += 14;
     drawLines(page, info.ship, leftX + 13, y, normal, 10, 14, muted);
   }
-  drawText(page, 'ÉMIS PAR', rightX + 13, top + 12, bold, 9, brown);
+  drawText(page, labels.issuedBy.toUpperCase(), rightX + 13, top + 12, bold, 9, brown);
   drawText(page, "Ébénisterie de l'Hermitage inc.", rightX + 13, top + 31, bold, 11);
   drawLines(page, ['68, chemin des guides', 'Ripon (Qc) J0V 1V0', '(819) 428-7690'], rightX + 13, top + 52, normal, 10, 14, muted);
   return top + height + 18;
@@ -304,42 +339,43 @@ function drawFlowDetails(doc, draft, context, initialPage, initialTop) {
     }
     cursor += 12;
   };
-  field('Projet', draft.project);
-  field('Date du document', displayDate(draft.date));
-  field(labels.date, displayDate(kind === 'facture' ? draft.dueDate : draft.validUntil, kind !== 'facture'));
+  field(labels.project, draft.project);
+  field(labels.documentDate, displayDate(draft.date, true, context.language));
+  field(labels.date, displayDate(kind === 'facture' ? draft.dueDate : draft.validUntil,
+    kind !== 'facture', context.language));
   field(labels.party, draft.client);
-  field('Adresse de facturation', draft.address);
-  field('Téléphone du client', draft.contact);
-  field('Courriel du client', draft.email);
-  field('Livrer à', draft.shipTo);
-  field('Émis par', "Ébénisterie de l'Hermitage inc.\n68, chemin des guides\nRipon (Qc) J0V 1V0\n(819) 428-7690");
+  field(labels.billingAddress, draft.address);
+  field(labels.clientPhone, draft.contact);
+  field(labels.clientEmail, draft.email);
+  field(labels.shipTo, draft.shipTo);
+  field(labels.issuedBy, "Ébénisterie de l'Hermitage inc.\n68, chemin des guides\nRipon (Qc) J0V 1V0\n(819) 428-7690");
   return { page, cursor };
 }
 
 function drawTableHeader(page, context, top) {
-  const { bold } = context;
-  drawText(page, 'DESCRIPTION', LEFT + 6, top + 5, bold, 9, brown);
-  drawText(page, 'QTÉ', 341, top + 5, bold, 9, brown);
-  drawRight(page, 'PRIX UNITAIRE', 466, top + 5, bold, 9, brown);
-  drawRight(page, 'MONTANT', RIGHT, top + 5, bold, 9, brown);
+  const { bold, labels } = context;
+  drawText(page, labels.description, LEFT + 6, top + 5, bold, 9, brown);
+  drawText(page, labels.quantity, 341, top + 5, bold, 9, brown);
+  drawRight(page, labels.unitPrice, 466, top + 5, bold, 9, brown);
+  drawRight(page, labels.amount, RIGHT, top + 5, bold, 9, brown);
   drawRule(page, top + 26, LEFT, RIGHT, brown, 1.3);
   return top + 27;
 }
 
 function drawItem(page, context, item, lines, top, showNumbers, continuationLine = null) {
-  const { normal, bold } = context;
+  const { normal, bold, labels, language } = context;
   const cueHeight = continuationLine === null ? 0 : 17;
   const height = Math.max(30, lines.length * ITEM_LINE + 16 + cueHeight);
   if (continuationLine !== null) {
-    drawText(page, `LIGNE ${continuationLine} · SUITE`, LEFT + 6, top + 8, bold, 8.5, brown);
+    drawText(page, `${labels.line} ${continuationLine} · ${labels.continued}`, LEFT + 6, top + 8, bold, 8.5, brown);
   }
   drawLines(page, lines, LEFT + 6, top + 8 + cueHeight, normal, 10.5, ITEM_LINE);
   if (showNumbers) {
-    const quantity = new Intl.NumberFormat('fr-CA', { maximumFractionDigits: 6 }).format(item.quantity);
+    const quantity = new Intl.NumberFormat(language === 'en' ? 'en-CA' : 'fr-CA', { maximumFractionDigits: 6 }).format(item.quantity);
     const qtyWidth = normal.widthOfTextAtSize(pdfText(quantity, normal), 10);
     drawText(page, quantity, 355 - qtyWidth / 2, top + 8, normal, 10);
-    drawRight(page, money(item.price), 466, top + 8, normal, 10);
-    drawRight(page, money(Math.round((item.quantity * item.price + Number.EPSILON) * 100) / 100), RIGHT, top + 8, normal, 10);
+    drawRight(page, money(item.price, language), 466, top + 8, normal, 10);
+    drawRight(page, money(Math.round((item.quantity * item.price + Number.EPSILON) * 100) / 100, language), RIGHT, top + 8, normal, 10);
   }
   drawRule(page, top + height, LEFT, RIGHT, rule, 0.6);
   return top + height;
@@ -348,18 +384,18 @@ function drawItem(page, context, item, lines, top, showNumbers, continuationLine
 function totalsHeight(deposit) { return deposit > 0 ? 143 : 100; }
 
 function drawTotals(page, context, totals) {
-  const { normal, bold, labels } = context;
+  const { normal, bold, labels, language } = context;
   const x = 331;
   const top = 724 - totalsHeight(totals.deposit);
   const row = (label, value, y, font = normal, size = 11) => {
     drawText(page, label, x, y, font, size);
-    drawRight(page, money(value), RIGHT, y, font, size);
+    drawRight(page, money(value, language), RIGHT, y, font, size);
   };
-  row('Sous-total', totals.subtotal, top);
-  row('TPS (5 %)', totals.tps, top + 22);
-  row('TVQ (9,975 %)', totals.tvq, top + 44);
+  row(labels.subtotal, totals.subtotal, top);
+  row(labels.gst, totals.tps, top + 22);
+  row(labels.qst, totals.tvq, top + 44);
   drawRule(page, top + 70, x, RIGHT, brown, 1.5);
-  row('Total avec taxes', totals.total, top + 77, bold, 13);
+  row(labels.total, totals.total, top + 77, bold, 13);
   if (totals.deposit > 0) {
     row(labels.deposit, totals.deposit, top + 104);
     drawRule(page, top + 124, x, RIGHT, rule, 0.8);
@@ -368,44 +404,44 @@ function drawTotals(page, context, totals) {
 }
 
 function drawFooters(doc, context) {
-  const { normal } = context;
+  const { normal, labels } = context;
   const count = doc.getPageCount();
   doc.getPages().forEach((page, index) => {
     drawRule(page, FOOTER_TOP);
-    drawText(page, 'TPS 848045563 RT0001', LEFT, 750, normal, 8.5, muted);
-    drawText(page, 'TVQ 1212260726 TQ0001', 231, 750, normal, 8.5, muted);
+    drawText(page, `${labels.gstId} 848045563 RT0001`, LEFT, 750, normal, 8.5, muted);
+    drawText(page, `${labels.qstId} 1212260726 TQ0001`, 231, 750, normal, 8.5, muted);
     drawRight(page, `${index + 1} / ${count}`, RIGHT, 750, normal, 8.5, muted);
   });
 }
 
-/** Create a French customer copy. English requests require a future reviewed translation flow. */
+/** Render the supplied draft as-is; English customer text must already be reviewed. */
 export async function createPdf(draft, { invoiceNumber = null, language = 'fr' } = {}) {
-  if (language === 'en') throw new Error('PDF anglais indisponible : la traduction doit être vérifiée avant export.');
-  if (language !== 'fr') throw new Error('Langue PDF non prise en charge.');
-  if (!draft || !LABELS[draft.kind]) throw new Error('Type de document invalide.');
+  if (language !== 'fr' && language !== 'en') throw new Error('Langue PDF non prise en charge.');
+  if (!draft || (draft.kind !== 'soumission' && draft.kind !== 'facture')) throw new Error('Type de document invalide.');
   const kind = draft.kind;
+  const labels = { ...LABELS[language].common, ...LABELS[language][kind] };
   const number = kind === 'facture' ? Number(invoiceNumber) : null;
   if (kind === 'facture' && (!Number.isSafeInteger(number) || number <= 0 || invoiceNumber === null || invoiceNumber === '')) {
     throw new Error('Numéro de facture valide requis pour le PDF.');
   }
   requiredText(draft.client, 'Nom du client');
   requiredText(draft.address, 'Adresse de facturation');
-  displayDate(draft.date);
-  displayDate(kind === 'facture' ? draft.dueDate : draft.validUntil, kind !== 'facture');
+  displayDate(draft.date, true, language);
+  displayDate(kind === 'facture' ? draft.dueDate : draft.validUntil, kind !== 'facture', language);
   const items = readItems(draft);
   const totals = calculateTotals(draft);
   const doc = await PDFDocument.create();
-  doc.setTitle(`${LABELS[kind].title}${number === null ? '' : ` ${number}`}`);
+  doc.setTitle(`${labels.title}${number === null ? '' : ` ${number}`}`);
   doc.setAuthor("Ébénisterie de l'Hermitage inc.");
   doc.setCreator("Ébénisterie de l'Hermitage inc.");
-  doc.setSubject('Document client');
+  doc.setSubject(labels.subject);
   doc.setKeywords([]);
   const [normal, bold, logo] = await Promise.all([
     doc.embedFont(StandardFonts.Helvetica),
     doc.embedFont(StandardFonts.HelveticaBold),
     doc.embedPng(LOGO_PNG_BASE64),
   ]);
-  const context = { normal, bold, logo, labels: LABELS[kind], kind, number };
+  const context = { normal, bold, logo, labels, language, kind, number };
   let page = doc.addPage([PAGE_W, PAGE_H]);
   let cursor = drawHeader(page, context, true);
   const projectLines = draft.project?.trim() ? wrapText(draft.project, bold, 12, 246).length : 0;
@@ -450,7 +486,7 @@ export async function createPdf(draft, { invoiceNumber = null, language = 'fr' }
       const noteTop = cursor + 19;
       const capacity = Math.floor((713 - noteTop - 24) / NOTE_LINE) + 1;
       if (capacity < 1) { nextPage(false); continue; }
-      drawText(page, at ? 'NOTE POUR LE CLIENT · SUITE' : 'NOTE POUR LE CLIENT', LEFT, noteTop, bold, 9, brown);
+      drawText(page, at ? `${labels.note} · ${labels.continued}` : labels.note, LEFT, noteTop, bold, 9, brown);
       const chunk = lines.slice(at, at + capacity);
       drawLines(page, chunk, LEFT, noteTop + 19, normal, 10.5, NOTE_LINE, muted);
       at += chunk.length;

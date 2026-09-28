@@ -126,6 +126,14 @@
     .line-entry textarea { min-height: 68px; margin-top: 0; text-align: justify; text-align-last: left; }
     .line-entry.assisting textarea { border-color: var(--accent); box-shadow: 0 0 0 3px #42a87538; }
     .line-entry.listening textarea { box-shadow: 0 0 0 4px #42a87565, 0 0 18px #42a87544; animation: listening-glow 1.5s ease-in-out infinite alternate; }
+    .line-entry.line-recording textarea { border-color: var(--accent); box-shadow: 0 0 0 4px #42a87565, 0 0 18px #42a87544; animation: listening-glow 1.5s ease-in-out infinite alternate; }
+    [data-voice].recording { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 4px #42a87545; animation: listening-glow 1.5s ease-in-out infinite alternate; }
+    .voice-status { margin: 2px 0 14px; padding: 9px 12px; border-left: 3px solid var(--accent); border-radius: 4px; background: var(--soft); color: var(--ink); font-size: 12px; }
+    .voice-recovery { display: grid; gap: 9px; margin: 2px 0 16px; padding: 12px; border: 1px solid var(--accent); border-radius: 10px; background: var(--surface); color: var(--ink); }
+    .voice-recovery strong { font-size: 13px; }
+    .voice-recovery p { margin: 0; color: var(--muted); font-size: 12px; }
+    .voice-recovery textarea { min-height: 80px; resize: vertical; }
+    .voice-recovery > div { display: flex; flex-wrap: wrap; gap: 7px; }
     @keyframes listening-glow { to { box-shadow: 0 0 0 5px #42a87585, 0 0 24px #42a87577; } }
     .line-review { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 9px 12px; margin-top: 9px; }
     .line-review-styles, .line-review-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
@@ -150,6 +158,22 @@
     .language-action strong { color: var(--ink); font-size: 13px; }
     .language-action small { margin-top: 3px; color: var(--muted); font-size: 11px; }
     .language-action button { white-space: nowrap; }
+    .language-buttons, .english-review-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+    .english-review { display: grid; gap: 12px; margin-top: 10px; padding: 16px; border: 1px solid var(--accent); border-radius: 12px; background: var(--surface); }
+    .english-review-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .english-review-head strong { color: var(--ink); font-size: 15px; }
+    .english-review-head button { width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); }
+    .english-review p { margin: 0; color: var(--muted); font-size: 12px; }
+    .english-review label { color: var(--ink); }
+    .english-review textarea { min-height: 68px; }
+    .translation-error, .english-review .translation-error { color: #ae3028; font-size: 12px; }
+    .app.dark .translation-error, .app.dark .english-review .translation-error { color: #ffaaa3; }
+    .ai-settings-panel { width: min(520px, 100%); }
+    .provider-choices { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; border: 0; }
+    .provider-choices legend { margin-bottom: 8px; color: var(--ink); font-size: 13px; font-weight: 750; }
+    .provider-choices label { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--ink); font-size: 13px; }
+    .provider-choices input { width: 18px; min-height: 18px; margin: 0; accent-color: var(--accent); }
+    .settings-note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
     .actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
     .primary { border: 0; background: var(--accent); color: var(--accent-ink); border-radius: 10px; min-height: 44px; padding: 0 16px; font-weight: 800; }
     .primary:hover { filter: brightness(1.08); box-shadow: 0 8px 20px #124b2d38; transform: translateY(-1px); }

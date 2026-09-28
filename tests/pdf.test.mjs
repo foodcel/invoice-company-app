@@ -48,13 +48,37 @@ test('one long work description continues across Letter pages', async () => {
   await writeFile(new URL('invoice-long-line-test.pdf', output), bytes);
 });
 
-test('customer output rejects missing facts and unreviewed English', async () => {
+test('customer output rejects missing facts and creates an English invoice copy', async () => {
   const draft = sampleDraft('facture');
   await assert.rejects(createPdf(draft, {}), /Numéro de facture/);
-  await assert.rejects(createPdf(draft, { invoiceNumber: 2060, language: 'en' }), /anglais indisponible/);
+  const english = structuredClone(draft);
+  english.project = 'Oak staircase';
+  english.notes = 'Installation included.';
+  english.items[0].description = 'Build and install an oak staircase.';
+  english.items[1].description = 'Delivery and installation.';
+  const bytes = await createPdf(english, { invoiceNumber: 2060, language: 'en' });
+  const document = await PDFDocument.load(bytes);
+  assert.equal(document.getTitle(), 'Invoice 2060');
+  assert.deepEqual(document.getPage(0).getSize(), { width: 612, height: 792 });
+  assert.deepEqual(calculateTotals(english), calculateTotals(draft));
+  await mkdir(output, { recursive: true });
+  await writeFile(new URL('invoice-english-test.pdf', output), bytes);
   draft.items[0].quantity = '0';
   await assert.rejects(createPdf(draft, { invoiceNumber: 2060 }), /Quantité/);
   draft.items[0].quantity = '2';
   draft.date = '2026-02-31';
   await assert.rejects(createPdf(draft, { invoiceNumber: 2060 }), /Date invalide/);
+});
+
+test('English quote keeps the French numeric facts on Letter paper', async () => {
+  const french = sampleDraft('soumission');
+  const english = structuredClone(french);
+  english.project = 'Oak staircase';
+  english.items[0].description = 'Build an oak staircase.';
+  english.items[1].description = 'Delivery and installation.';
+  const bytes = await createPdf(english, { language: 'en' });
+  const document = await PDFDocument.load(bytes);
+  assert.equal(document.getTitle(), 'Quote');
+  assert.deepEqual(document.getPage(0).getSize(), { width: 612, height: 792 });
+  assert.deepEqual(calculateTotals(english), calculateTotals(french));
 });
