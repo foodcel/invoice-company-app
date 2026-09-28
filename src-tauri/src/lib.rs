@@ -87,6 +87,7 @@ pub struct StateResponse {
 pub struct ExportResponse {
     pub path: String,
     pub filename: String,
+    pub name_collision: bool,
     pub invoice_number: Option<u64>,
     pub snapshot: Draft,
 }
@@ -427,6 +428,8 @@ impl Repository {
                     let snapshot = store.records[store.index(&pending.id)?].draft.clone();
                     return Ok(ExportResponse {
                         path: path.to_string_lossy().into_owned(),
+                        name_collision: pending.filename
+                            != base_filename(&draft, pending.invoice_number, &language)?,
                         filename: pending.filename,
                         invoice_number: pending.invoice_number,
                         snapshot,
@@ -461,10 +464,8 @@ impl Repository {
         let number = snapshot
             .issued_number
             .or((snapshot.kind == Kind::Facture).then_some(store.next_invoice_number));
-        let filename = available_filename(
-            &self.output_dir(),
-            &base_filename(&snapshot, number, &language)?,
-        )?;
+        let base_name = base_filename(&snapshot, number, &language)?;
+        let filename = available_filename(&self.output_dir(), &base_name)?;
         store.pending_export = Some(PendingExport {
             id: snapshot.id.clone(),
             filename: filename.clone(),
@@ -520,6 +521,7 @@ impl Repository {
         Ok(ExportResponse {
             path: path.to_string_lossy().into_owned(),
             filename: path.file_name().unwrap().to_string_lossy().into_owned(),
+            name_collision: path.file_name().unwrap().to_string_lossy() != base_name,
             invoice_number: number,
             snapshot: issued_snapshot,
         })
@@ -1120,6 +1122,7 @@ mod tests {
             .export_pdf(draft.clone(), PDF.to_vec(), Some(2060), "fr".into())
             .unwrap();
         assert_eq!(first.invoice_number, Some(2060));
+        assert!(!first.name_collision);
         assert_eq!(first.snapshot.issued_number, Some(2060));
         assert_eq!(repo.load_state().unwrap().next_invoice_number, 2061);
         fs::write(repo.primary(), b"{corrupt").unwrap();
@@ -1132,6 +1135,7 @@ mod tests {
         assert_eq!(repeat.invoice_number, Some(2060));
         assert_ne!(repeat.path, first.path);
         assert!(repeat.filename.ends_with("_2.pdf"));
+        assert!(repeat.name_collision);
         assert_eq!(
             repo.new_draft(Kind::Facture)
                 .unwrap()
@@ -1175,6 +1179,38 @@ mod tests {
     }
 
     #[test]
+    fn type_switch_keeps_unissued_content_and_blocks_issued_invoice_change() {
+        let (_temp, repo) = setup();
+        let mut draft = repo.load_state().unwrap().current;
+        draft.project = "Armoire".into();
+        draft.client = "Peter".into();
+        draft.address = "Adresse".into();
+        draft.items[0].description = "Travail".into();
+        draft.items[0].price = "100".into();
+        draft.kind = Kind::Facture;
+        let invoice = repo.save_draft(draft).unwrap().current;
+        assert_eq!(invoice.invoice_number, Some(2060));
+        assert_eq!(invoice.project, "Armoire");
+
+        let mut back_to_quote = invoice;
+        back_to_quote.kind = Kind::Soumission;
+        let quote = repo.save_draft(back_to_quote).unwrap().current;
+        assert_eq!(quote.invoice_number, None);
+        assert_eq!(quote.client, "Peter");
+        assert_eq!(quote.items[0].description, "Travail");
+
+        let mut invoice_again = quote;
+        invoice_again.kind = Kind::Facture;
+        let invoice_again = repo.save_draft(invoice_again).unwrap().current;
+        let issued = repo
+            .export_pdf(invoice_again, PDF.to_vec(), Some(2060), "fr".into())
+            .unwrap();
+        let mut invalid_change = issued.snapshot;
+        invalid_change.kind = Kind::Soumission;
+        assert!(repo.save_draft(invalid_change).is_err());
+    }
+
+    #[test]
     fn filenames_stay_inside_intake_and_invalid_inputs_are_rejected() {
         let (_temp, repo) = setup();
         let mut draft = ready_invoice(&repo);
@@ -1197,6 +1233,7 @@ mod tests {
             .export_pdf(quote.clone(), PDF.to_vec(), None, "fr".into())
             .unwrap();
         assert_ne!(one.filename, two.filename);
+        assert!(two.name_collision);
         assert!(!one.filename.contains("2060"));
         quote.date = "2026-02-30".into();
         assert!(repo.save_draft(quote.clone()).is_err());

@@ -78,5 +78,5 @@ Mark each box only after exercising the stated behavior. Capture screenshots of 
 - [ ] Confirm tax applicability and Dad's deposit policy; verify calculations and invoice language against those rules.
 - [ ] Set backup retention and restore behavior; decide whether more than one computer may issue invoices (that requires a shared transactional number authority).
 - [ ] Decide how corrections to an already issued invoice are recorded and whether final issuance also creates/updates a QuickBooks record.
-- [ ] Decide whether first **Imprimer** issues an invoice and fixes its number, or requires a PDF to be created first; never print a final copy with an unassigned number.
+- [x] The user confirmed that **Imprimer** first saves a PDF, issues an invoice number on that first successful save, then opens printing; the app must tell Dad before proceeding.
 - [ ] Decide which voice-filled fields require spoken read-back or explicit visual confirmation. The phone interface and Company Bridge integration remain later work and are not UI-parity claims here.

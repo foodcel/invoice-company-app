@@ -38,6 +38,8 @@
     let updateDraftSaved = false;
     let updateRequestId = 0;
     let numberConfirm = null;
+    let numberEditing = false;
+    let numberError = '';
     let saveStatus = 'Brouillon chargé';
     let outputStatus = '';
     const copy = value => JSON.parse(JSON.stringify(value));
@@ -260,7 +262,12 @@
     }
     function recentDialog() {
       if (!recentOpen) return '';
-      return `<div class="recent-backdrop"><div class="recent-panel" role="dialog" aria-modal="true" aria-labelledby="recent-title"><div class="recent-head"><h3 id="recent-title">Documents récents</h3><button type="button" data-close-recent aria-label="Fermer les documents récents" title="Fermer">✕</button></div><p class="recent-hint">Brouillons enregistrés sur cet ordinateur.</p><label for="recent-search">Rechercher un client ou un projet</label><input id="recent-search" data-recent-search type="search" value="${esc(recentQuery)}" placeholder="Nom du client ou du projet"><div class="recent-list" id="recent-list">${recentRows()}</div><div id="next-number-form" class="next-number-form"><label for="next-number">Prochain numéro de facture</label><div><input id="next-number" name="number" type="number" min="1" step="1" value="${esc(numberConfirm ?? nextInvoiceNumber ?? '')}" required aria-describedby="next-number-help" ${numberConfirm === null ? '' : 'readonly'}>${numberConfirm === null ? '<button type="button" class="plain-button" data-stage-number>Modifier</button>' : ''}</div><small id="next-number-help">Les factures déjà émises conservent leur numéro.</small>${numberConfirm === null ? '' : `<div class="number-confirm" role="group" aria-label="Confirmer le prochain numéro"><strong>Définir ${numberConfirm} comme prochain numéro ?</strong><div><button type="button" class="primary" data-apply-number>Confirmer</button><button type="button" class="plain-button" data-cancel-number>Annuler</button></div></div>`}</div></div></div>`;
+      return `<div class="recent-backdrop"><div class="recent-panel" role="dialog" aria-modal="true" aria-labelledby="recent-title"><div class="recent-head"><h3 id="recent-title">Documents récents</h3><button type="button" data-close-recent aria-label="Fermer les documents récents" title="Fermer">✕</button></div><p class="recent-hint">Brouillons enregistrés sur cet ordinateur.</p><label for="recent-search">Rechercher un client ou un projet</label><input id="recent-search" data-recent-search type="search" value="${esc(recentQuery)}" placeholder="Nom du client ou du projet"><div class="recent-list" id="recent-list">${recentRows()}</div></div></div>`;
+    }
+    function invoiceNumberControl() {
+      if (state.kind !== 'facture') return '';
+      const issued = Boolean(state.issuedNumber);
+      return `<div class="invoice-number"><div class="invoice-number-top"><span>Numéro de facture ${issued ? 'émise' : 'proposé'} : <strong>n° <span data-preview="invoiceNumber">${state.invoiceNumber ?? '—'}</span></strong></span><button type="button" class="plain-button" data-edit-number>${issued ? 'Régler le prochain n°' : 'Modifier le n°'}</button></div>${numberEditing ? `<div class="next-number-form" id="next-number-form"><label for="next-number">Prochain numéro de facture</label><div class="number-entry"><input id="next-number" name="number" type="number" min="1" step="1" value="${esc(numberConfirm ?? nextInvoiceNumber ?? '')}" required aria-describedby="next-number-help" ${numberConfirm === null ? '' : 'readonly'}>${numberConfirm === null ? '<button type="button" class="plain-button number-step" data-number-step="-1" aria-label="Diminuer le prochain numéro de facture">−</button><button type="button" class="plain-button number-step" data-number-step="1" aria-label="Augmenter le prochain numéro de facture">+</button><button type="button" class="primary" data-stage-number>Appliquer</button>' : ''}<button type="button" class="plain-button" data-close-number>Fermer</button></div><small id="next-number-help">Ce réglage s'applique aux prochaines factures. Les numéros déjà émis restent inchangés.</small>${numberError ? `<p class="number-error" role="alert">${esc(numberError)}</p>` : ''}${numberConfirm === null ? '' : `<div class="number-confirm" role="group" aria-label="Confirmer le prochain numéro"><strong>Définir ${numberConfirm} comme prochain numéro ?</strong><div><button type="button" class="primary" data-apply-number>Confirmer</button><button type="button" class="plain-button" data-cancel-number>Annuler</button></div></div>`}</div>` : ''}</div>`;
     }
     function updateDialog() {
       if (!updateOpen) return '';
@@ -310,7 +317,7 @@
             </div>
           </div>
           <div class="summary-section">
-            ${state.kind === 'facture' ? `<div class="invoice-number">Numéro de facture ${state.issuedNumber ? 'émise' : 'proposé'} : <strong>n° <span data-preview="invoiceNumber">${state.invoiceNumber ?? '—'}</span></strong></div>` : ''}
+            ${invoiceNumberControl()}
             <div class="language-action"><div><strong>Copie pour le client · Français</strong><small>Traduction anglaise : bientôt disponible.</small></div><button type="button" class="plain-button" data-translate disabled aria-label="Traduire en anglais — bientôt disponible" title="Traduction bientôt disponible">Traduire en anglais</button></div>
           </div>
           <div class="actions"><button type="button" class="primary" data-pdf>Créer le PDF</button><button type="button" class="print-button" data-print>Imprimer</button></div><p class="output-status" role="status" aria-live="polite">${esc(outputStatus)}</p>
@@ -365,6 +372,8 @@
         showValidation = false;
         recentOpen = false;
         numberConfirm = null;
+        numberEditing = false;
+        numberError = '';
         outputStatus = '';
         calendarField = null;
         render();
@@ -379,6 +388,16 @@
     }
     async function exportDocument(printAfter = false) {
       if (busy || !readyForOutput()) return;
+      const alreadyExported = Boolean(records.find(record => record.id === state.id)?.exports?.length);
+      if (printAfter) {
+        const numberMessage = state.kind === 'facture' && !state.issuedNumber
+          ? ` Le numéro ${state.invoiceNumber} sera confirmé et le suivant sera proposé pour la prochaine facture.`
+          : '';
+        const copyMessage = alreadyExported ? ' Une copie précédente sera conservée.' : '';
+        if (!confirm(`Avant d'imprimer, l'application enregistrera ${alreadyExported ? 'une nouvelle copie du PDF' : 'le PDF'} dans Documents > Entreprise > À classer.${numberMessage}${copyMessage} Continuer ?`)) return;
+      } else if (alreadyExported && !confirm('Ce document a déjà été enregistré en PDF. Créer une autre copie avec le même numéro de facture, si applicable ? Le fichier précédent sera conservé.')) {
+        return;
+      }
       setBusy(true);
       let archivedPath = null;
       try {
@@ -397,12 +416,15 @@
         if (!result?.snapshot || !result?.path) throw new Error('La confirmation du PDF est incomplète.');
         archivedPath = result.path;
         state = copy(result.snapshot);
+        numberEditing = false; numberConfirm = null; numberError = '';
         savedRevision = editRevision;
         try { applySnapshot(await runCommand('load_state')); }
         catch (refreshError) { notice(`PDF enregistré, mais liste non actualisée : ${errorText(refreshError)}`); }
         outputStatus = `${printAfter ? 'PDF enregistré avant impression' : 'PDF enregistré'} : ${result.path}`;
         render();
-        notice(`PDF enregistré : ${result.path}`);
+        notice(result.nameCollision
+          ? `Un PDF portait déjà ce nom. Nouvelle copie : ${result.filename}. L'ancien fichier a été conservé.`
+          : `PDF enregistré : ${result.path}`);
         if (printAfter) {
           setBusy(true);
           await new Promise(resolve => requestAnimationFrame(resolve));
@@ -557,10 +579,25 @@
         return;
       }
       if (b.hasAttribute('data-close-recent')) { closeRecent(); return; }
+      if (b.hasAttribute('data-edit-number')) {
+        if (!await flushChanges()) return;
+        numberEditing = true; numberConfirm = null; numberError = '';
+        render(); document.getElementById('next-number')?.focus(); return;
+      }
+      if (b.hasAttribute('data-close-number')) {
+        numberEditing = false; numberConfirm = null; numberError = '';
+        render(); document.querySelector('[data-edit-number]')?.focus(); return;
+      }
+      if (b.dataset.numberStep) {
+        const input = document.getElementById('next-number');
+        if (b.dataset.numberStep === '1') input?.stepUp(); else input?.stepDown();
+        numberError = ''; input?.focus(); return;
+      }
       if (b.hasAttribute('data-stage-number')) {
         const number = Number(document.getElementById('next-number')?.value);
-        if (!Number.isSafeInteger(number) || number <= 0) { notice('Entrez un numéro entier positif.'); document.getElementById('next-number')?.focus(); return; }
-        if (number === nextInvoiceNumber) { notice('Ce numéro est déjà le prochain numéro.'); return; }
+        if (!Number.isSafeInteger(number) || number <= 0) { numberError = 'Entrez un numéro entier positif.'; render(); document.getElementById('next-number')?.focus(); return; }
+        if (number === nextInvoiceNumber) { numberError = 'Ce numéro est déjà le prochain numéro.'; render(); document.getElementById('next-number')?.focus(); return; }
+        numberError = '';
         numberConfirm = number;
         render(); document.querySelector('[data-apply-number]')?.focus();
         return;
@@ -571,10 +608,10 @@
         setBusy(true);
         try {
           const snapshot = await runCommand('set_next_invoice_number', { number: numberConfirm });
-          applySnapshot(snapshot); numberConfirm = null; render();
-          document.getElementById('next-number')?.focus();
+          applySnapshot(snapshot); numberConfirm = null; numberEditing = false; numberError = ''; render();
+          document.querySelector('[data-edit-number]')?.focus();
           notice(`Prochain numéro de facture : ${nextInvoiceNumber}.`);
-        } catch (error) { notice(`Numéro inchangé : ${errorText(error)}`); }
+        } catch (error) { numberError = `Numéro inchangé : ${errorText(error)}`; numberConfirm = null; render(); document.getElementById('next-number')?.focus(); }
         finally { setBusy(false); }
         return;
       }
@@ -601,7 +638,7 @@
         if (state.kind === b.dataset.kind) return;
         if (state.issuedNumber) { notice('Cette facture est déjà émise. Créez un nouveau document pour changer de type.'); return; }
         rememberUndo();
-        state.kind = b.dataset.kind; showValidation = false; render();
+        state.kind = b.dataset.kind; showValidation = false; numberEditing = false; numberConfirm = null; numberError = ''; render();
         document.querySelector('.workbench')?.classList.add('switching');
         markDirty(); void saveNow();
         return;

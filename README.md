@@ -9,9 +9,9 @@ The Windows icon is the approved **Document** concept (`src-tauri/icons/icon-sou
 1. Install the Windows setup program once, then open **Soumissions et factures** from the Start menu or desktop shortcut.
 2. Choose **Soumission** or **Facture**, enter the customer and work details, and review the page on the right.
 3. The form saves automatically; **Enregistrer le brouillon** saves immediately. **Documents récents** reopens earlier work.
-4. Choose **Créer le PDF** to save a customer copy in `Documents\Entreprise\À classer`. **Imprimer** also archives a PDF, then opens Windows printing. The PDF name uses the customer's name and the invoice number when applicable.
+4. Choose **Créer le PDF** to save a customer copy in `Documents\Entreprise\À classer`. **Imprimer** first explains that it will save a PDF, then opens Windows printing. The PDF name uses the customer's name and the invoice number when applicable. If a PDF with the same name exists, the app keeps it and tells you the new copy's name.
 
-The next invoice number starts at **2060**. Saving a draft does not issue a number. The first successful PDF export of an invoice fixes its number; later saves and exports of that invoice keep it. **Documents récents** has a confirmed setting for the next unissued invoice number.
+The next invoice number starts at **2060**. Saving a draft does not issue a number. The first successful PDF export of an invoice fixes its number; later saves and exports of that invoice keep it. Use **Modifier le n°** beside the displayed invoice number to change the next unissued number; an issued invoice cannot be renumbered.
 
 ## Build and test on Windows
 
@@ -20,6 +20,7 @@ The build PC needs Node.js, Rust (MSVC toolchain), Microsoft C++ Build Tools, an
 ```powershell
 npm install
 npm run check
+scripts\check-rust.cmd
 scripts\build-windows.cmd
 scripts\package-release.ps1 -SkipBuild
 ```
