@@ -1592,7 +1592,7 @@ dependencies = [
 
 [[package]]
 name = "invoice-company-app"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "chrono",
  "fs2",

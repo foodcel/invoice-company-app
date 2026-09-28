@@ -2,6 +2,8 @@
 
 Windows application for Ébénisterie de l'Hermitage inc. to prepare French quotations and invoices. The first release focuses on manual entry. Voice dictation, AI rewriting, and English translation are visibly unavailable until they can be implemented and reviewed.
 
+The Windows icon is the approved **Document** concept (`src-tauri/icons/icon-source.svg`). To regenerate its Windows assets after editing that source, run `npm run tauri -- icon src-tauri/icons/icon-source.svg` and retain `icon.png` and `icon.ico` in `src-tauri/icons`.
+
 ## For Dad
 
 1. Install the Windows setup program once, then open **Soumissions et factures** from the Start menu or desktop shortcut.

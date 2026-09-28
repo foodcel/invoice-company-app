@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Document: house mark on a simple invoice page">
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#779c88"/><stop offset="1" stop-color="#3e6a5e"/></linearGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="9" stdDeviation="8" flood-color="#153a2f" flood-opacity=".3"/></filter>
+  </defs>
+  <rect width="256" height="256" rx="54" fill="url(#bg)"/>
+  <path d="M58 30h112l30 30v166H58z" fill="#fffaf0" filter="url(#shadow)"/>
+  <path d="M170 30v30h30" fill="#dfd5c5"/>
+  <path d="M170 30v30h30" fill="none" stroke="#c7bbaa" stroke-width="2"/>
+  <path d="M128 62 174 101v71H82v-71Z" fill="#705044"/>
+  <path d="M95 105c19-13 34-25 49-31M90 127c26-17 43-28 62-38M91 151c24-14 38-22 73-42" fill="none" stroke="#b7896e" stroke-width="2" stroke-linecap="round"/>
+  <path d="M113 111h30v48h-30z" fill="#fffaf0"/>
+  <path d="M88 180h80M88 193h80M88 206h49" fill="none" stroke="#b8b7a8" stroke-width="6" stroke-linecap="round"/>
+</svg>
