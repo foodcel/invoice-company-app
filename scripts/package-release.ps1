@@ -32,7 +32,7 @@ try {
     $releaseDir = Join-Path $appRoot "release-output\v$version"
     if (Test-Path -LiteralPath $releaseDir) { throw "Release folder already exists: $releaseDir" }
     New-Item -ItemType Directory -Path $releaseDir | Out-Null
-    $releaseInstaller = Join-Path $releaseDir (Split-Path -Leaf $installer)
+    $releaseInstaller = Join-Path $releaseDir "Soumissions-et-factures_${version}_x64-setup.exe"
     $releaseSignature = "$releaseInstaller.sig"
     Copy-Item -LiteralPath $installer -Destination $releaseInstaller
     Copy-Item -LiteralPath $signature -Destination $releaseSignature

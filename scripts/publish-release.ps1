@@ -6,7 +6,7 @@ $package = Get-Content -LiteralPath (Join-Path $appRoot 'package.json') -Raw | C
 $version = [string]$package.version
 $tag = "v$version"
 $releaseDir = Join-Path $appRoot "release-output\$tag"
-$installerName = "Soumissions et factures_${version}_x64-setup.exe"
+$installerName = "Soumissions-et-factures_${version}_x64-setup.exe"
 $files = @($installerName, "$installerName.sig", 'latest.json')
 foreach ($name in $files) {
     if (-not (Test-Path -LiteralPath (Join-Path $releaseDir $name) -PathType Leaf)) {
@@ -34,6 +34,7 @@ foreach ($name in $files) {
     $path = Join-Path $releaseDir $name
     $encoded = [System.Uri]::EscapeDataString($name)
     $asset = Invoke-RestMethod -Method Post -Uri "${uploadBase}?name=$encoded" -Headers $headers -ContentType 'application/octet-stream' -InFile $path
+    if ($asset.name -cne $name) { throw "GitHub changed the uploaded filename: $name -> $($asset.name)" }
     if ([int64]$asset.size -ne (Get-Item -LiteralPath $path).Length) { throw "Uploaded file size mismatch: $name" }
     Write-Host "Uploaded $name"
 }

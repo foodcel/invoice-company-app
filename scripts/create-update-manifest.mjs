@@ -11,7 +11,9 @@ if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error('Rep
 const installer = await readFile(installerPath);
 const signature = (await readFile(signaturePath, 'utf8')).trim();
 if (installer.length < 1024 || !signature) throw new Error('Installer or signature is empty');
-const asset = encodeURIComponent(basename(installerPath));
+const installerName = basename(installerPath);
+if (!/^[A-Za-z0-9_.-]+$/.test(installerName)) throw new Error('Installer asset name must use only ASCII letters, digits, dots, underscores, or hyphens');
+const asset = encodeURIComponent(installerName);
 const manifest = {
   version,
   notes: 'Mise à jour de l’application de soumissions et factures.',

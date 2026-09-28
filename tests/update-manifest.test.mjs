@@ -30,3 +30,22 @@ test('release manifest points at the exact signed Windows installer', async () =
     await rm(folder, { recursive: true, force: true });
   }
 });
+
+test('release manifest rejects an installer name GitHub may rewrite', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'invoice-manifest-'));
+  try {
+    const installer = join(folder, 'Soumissions et factures.exe');
+    const signature = `${installer}.sig`;
+    const output = join(folder, 'latest.json');
+    await writeFile(installer, Buffer.alloc(2048, 7));
+    await writeFile(signature, 'signed-test-data\n');
+    const result = spawnSync(process.execPath, [script, '0.1.0', 'owner/invoice-company-app', installer, signature, output], { encoding: 'utf8' });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /asset name must use only ASCII/);
+  } finally {
+    const base = resolve(tmpdir()).toLowerCase();
+    const target = resolve(folder).toLowerCase();
+    assert.ok(target.startsWith(`${base}\\`) || target.startsWith(`${base}/`));
+    await rm(folder, { recursive: true, force: true });
+  }
+});
