@@ -27,7 +27,8 @@ try {
     if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw }
 }
 
-$body = @{ tag_name = $tag; target_commitish = 'main'; name = "Soumissions et factures $tag"; body = 'First Windows release. French quotations and invoices with local drafts, Letter PDFs, printing, and signed update support.'; draft = $true; prerelease = $false } | ConvertTo-Json -Compress
+$notes = if ($version -eq '0.1.0') { 'First Windows release. French quotations and invoices with local drafts, Letter PDFs, printing, and signed update support.' } else { "Windows release $tag. Signed update package for existing installations." }
+$body = @{ tag_name = $tag; target_commitish = 'main'; name = "Soumissions et factures $tag"; body = $notes; draft = $true; prerelease = $false } | ConvertTo-Json -Compress
 $release = Invoke-RestMethod -Method Post -Uri "$api/releases" -Headers $headers -ContentType 'application/json' -Body $body
 $uploadBase = ($release.upload_url -replace '\{.*$', '')
 foreach ($name in $files) {
