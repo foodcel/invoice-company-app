@@ -37,6 +37,8 @@ $notes = if ($version -eq '0.1.0') {
     'Invoice numbers can now be deliberately reused after a warning. Existing invoices and PDFs stay intact, and the automatic sequence continues forward. The editor has a compact save-status icon, matched work-line controls and read-only amount box, cleaner invoice preview, side-by-side number and translation controls, and inner focus highlights. Local Nemotron dictation and OpenAI or Z.ai AI features remain available.'
 } elseif ($version -eq '0.1.9') {
     'Draft save status is now shown inside the Save Draft button: a pending dot, a small spinner while saving, a check after confirmation, or an error mark. Hover to see that drafts save automatically on this PC and the time of the last confirmed save. The existing invoice number and English-copy panels are unchanged while compact design options are reviewed.'
+} elseif ($version -eq '0.1.10') {
+    'The approved compact number and language panels now sit side by side in one row. Invoice number editing stays inside its card; reused numbers still require confirmation. The full-card Francais/English switch translates on selection and shows the English customer preview. Creating or printing the English PDF confirms that copy, and later French text changes require a refreshed translation. Manual French documents remain available without AI.'
 } else { "Windows release $tag. Signed update package for existing installations." }
 $body = @{ tag_name = $tag; target_commitish = 'main'; name = "Soumissions et factures $tag"; body = $notes; draft = $true; prerelease = $false } | ConvertTo-Json -Compress
 $release = Invoke-RestMethod -Method Post -Uri "$api/releases" -Headers $headers -ContentType 'application/json' -Body $body

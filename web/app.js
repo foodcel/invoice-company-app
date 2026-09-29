@@ -36,6 +36,7 @@
     let folderError = '';
     let englishMode = false;
     let translationError = '';
+    let translationLoading = false;
     let settingsOpen = false;
     let settingsBusy = false;
     let settingsError = '';
@@ -88,6 +89,7 @@
     }
     function markDirty() {
       if (!voiceSession) voiceStatus = '';
+      if (englishMode && !englishCurrent()) englishMode = false;
       editRevision++;
       outputStatus = '';
       const output = document.querySelector('.output-status');
@@ -177,6 +179,14 @@
         Array.isArray(en.sourceDescriptions) && en.sourceDescriptions.length === state.items.length &&
         en.sourceDescriptions.every((value, index) => value === state.items[index].description) &&
         Array.isArray(en.descriptions) && en.descriptions.length === state.items.length);
+    };
+    const englishComplete = () => {
+      if (!englishCurrent()) return false;
+      const en = state.englishCopy;
+      return (!state.project.trim() || Boolean(en.project.trim())) &&
+        (!state.notes.trim() || Boolean(en.notes.trim())) &&
+        state.items.every((item, index) => item.description.trim()
+          ? Boolean(en.descriptions[index].trim()) : en.descriptions[index] === '');
     };
     const customerDraft = () => {
       if (!englishMode || !state.englishCopy) return state;
@@ -390,17 +400,13 @@
       const warning = used
         ? `La facture n° ${numberConfirm} existe déjà. Vous pouvez réutiliser ce numéro pour ${issued ? 'une nouvelle facture' : 'ce brouillon'}. L’ancien PDF restera intact; la nouvelle copie aura un nom de fichier distinct.`
         : older ? `Le n° ${numberConfirm} est inférieur au prochain numéro automatique. Il sera réservé à ${issued ? 'une nouvelle facture' : 'ce brouillon'}; le prochain numéro automatique restera ${nextInvoiceNumber}.` : '';
-      return `<div class="invoice-number"><div class="invoice-number-top"><span>Numéro de facture ${issued ? 'émise' : 'proposé'} : <strong>n° <span data-preview="invoiceNumber">${state.invoiceNumber ?? '—'}</span></strong></span><button type="button" class="plain-button" data-edit-number>${issued ? 'Régler le prochain n°' : 'Modifier le n°'}</button></div>${numberEditing ? `<div class="next-number-form" id="next-number-form"><label for="next-number">${issued ? 'Numéro pour la prochaine facture' : 'Numéro de cette facture'}</label><div class="number-entry"><input id="next-number" name="number" type="number" min="1" step="1" value="${esc(numberConfirm ?? (issued ? nextInvoiceNumber : state.invoiceNumber) ?? '')}" required aria-describedby="next-number-help" ${numberConfirm === null ? '' : 'readonly'}>${numberConfirm === null ? '<button type="button" class="plain-button number-step" data-number-step="-1" aria-label="Diminuer le numéro de facture">−</button><button type="button" class="plain-button number-step" data-number-step="1" aria-label="Augmenter le numéro de facture">+</button><button type="button" class="primary" data-stage-number>Appliquer</button>' : ''}<button type="button" class="plain-button" data-close-number>Fermer</button></div><small id="next-number-help">Un ancien numéro peut être réutilisé après confirmation. Les anciens PDF restent intacts.</small>${numberError ? `<p class="number-error" role="alert">${esc(numberError)}</p>` : ''}${numberConfirm === null ? '' : `<div class="number-confirm" role="group" aria-label="Confirmer le numéro de facture">${warning ? `<p class="number-warning" role="alert">${esc(warning)}</p>` : `<strong>Définir ${numberConfirm} comme prochain numéro ?</strong>`}<div><button type="button" class="primary" data-apply-number>${used || older ? 'Confirmer la réutilisation' : 'Confirmer'}</button><button type="button" class="plain-button" data-cancel-number>Annuler</button></div></div>`}</div>` : ''}</div>`;
+      const editValue = numberConfirm ?? (issued ? nextInvoiceNumber : state.invoiceNumber) ?? '';
+      const editRow = `<label class="number-prefix" for="next-number">N°</label><input id="next-number" name="number" type="number" min="1" step="1" value="${esc(editValue)}" required ${numberConfirm === null ? '' : 'readonly'} aria-label="${issued ? 'Numéro de la prochaine facture' : 'Numéro de cette facture'}">${numberConfirm === null ? '<button type="button" class="number-step" data-number-step="-1" aria-label="Diminuer le numéro de facture">−</button><button type="button" class="number-step" data-number-step="1" aria-label="Augmenter le numéro de facture">+</button><button type="button" class="number-apply" data-stage-number>OK</button>' : '<button type="button" class="number-step" data-cancel-number aria-label="Annuler la confirmation">×</button>'}`;
+      const viewRow = `<span class="number-prefix">N°</span><strong class="number-value" data-preview="invoiceNumber">${state.invoiceNumber ?? '—'}</strong><button type="button" class="number-edit" data-edit-number aria-label="${issued ? 'Régler le numéro de la prochaine facture' : 'Modifier le numéro de facture'}" title="${issued ? 'Régler le prochain numéro' : 'Modifier le numéro'}">✎</button>`;
+      return `<div class="invoice-number"><div class="number-row">${numberEditing ? editRow : viewRow}</div>${numberConfirm !== null ? `<div class="number-popover" role="group" aria-label="Confirmer le numéro"><p class="number-warning" role="alert">${esc(warning)}</p><div><button type="button" class="primary" data-apply-number>Confirmer</button><button type="button" class="plain-button" data-cancel-number>Annuler</button></div></div>` : numberError ? `<div class="number-popover number-error" role="alert">${esc(numberError)}</div>` : ''}</div>`;
     }
     function languageControls() {
-      const copy = state.englishCopy;
-      const current = englishCurrent();
-      const status = !copy ? 'Rédigez en français, puis créez une copie anglaise à vérifier.'
-        : !current ? 'Le français a changé. La copie anglaise doit être actualisée.'
-        : copy.reviewed ? 'Copie anglaise vérifiée et enregistrée avec ce document.'
-        : 'Relisez et confirmez la copie anglaise avant le PDF.';
-      const translateLabel = copy ? 'Retraduire' : 'Traduire en anglais';
-      return `<div class="language-action"><div><strong>Copie pour le client · ${englishMode ? 'Anglais' : 'Français'}</strong><small>${status}</small></div><div class="language-buttons">${copy ? `<button type="button" class="plain-button" data-show-french ${englishMode ? '' : 'disabled'}>Français</button><button type="button" class="plain-button" data-show-english ${englishMode ? 'disabled' : ''}>English</button>` : ''}<button type="button" class="plain-button" data-translate>${translateLabel}</button></div></div>${translationError ? `<p class="translation-error" role="alert">${esc(translationError)}</p>` : ''}${englishMode && copy ? `<div class="english-review" aria-label="Vérification de la copie anglaise"><div class="english-review-head"><strong>Vérifier la copie anglaise</strong><button type="button" data-show-french aria-label="Fermer la copie anglaise" title="Revenir au français">✕</button></div>${!current ? '<p class="translation-error">Le texte français a changé. Retraduisez avant de créer un PDF anglais.</p>' : ''}<p>Relisez les mots anglais. Les prix, dates et numéros viennent toujours du document français.</p>${state.project.trim() ? `<label>Project<input data-en-field="project" value="${esc(copy.project)}"></label>` : ''}${state.items.map((item, index) => `<label>Line ${index + 1} · Description<textarea data-en-item="${index}" rows="2">${esc(copy.descriptions[index] ?? '')}</textarea></label>`).join('')}${state.notes.trim() ? `<label>Note to client<textarea data-en-field="notes" rows="2">${esc(copy.notes)}</textarea></label>` : ''}<div class="english-review-actions"><button type="button" class="primary" data-accept-english ${current ? '' : 'disabled'}>${copy.reviewed && current ? 'Copie vérifiée' : 'Confirmer cette copie'}</button><button type="button" class="plain-button" data-show-french>Revenir au français</button></div></div>` : ''}`;
+      return `<div class="language-panel" role="group" aria-label="Langue du PDF"><button type="button" data-show-french aria-pressed="${!englishMode}" class="${englishMode ? '' : 'active'}">Français</button><button type="button" data-show-english aria-pressed="${englishMode}" aria-busy="${translationLoading}" class="${englishMode ? 'active' : ''}">${translationLoading ? 'English…' : 'English'}</button></div>`;
     }
     function updateDialog() {
       if (!updateOpen) return '';
@@ -451,7 +457,7 @@
           </div>
           <div class="summary-section">
             ${invoiceNumberControl()}
-            <div class="language-panel">${languageControls()}</div>
+            ${languageControls()}
           </div>
           <div class="actions"><button type="button" class="primary" data-pdf>Créer le PDF</button><button type="button" class="print-button" data-print>Imprimer</button></div><p class="output-status" role="status" aria-live="polite">${esc(outputStatus)}</p>
         </section><aside class="preview">${preview()}</aside></div>${recentDialog()}${updateDialog()}${folderDialog()}${aiSettingsDialog()}`;
@@ -479,9 +485,8 @@
     let toastTimer;
     function notice(message) { const el = document.getElementById('toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 3700); }
     function readyForOutput() {
-      if (englishMode && (!englishCurrent() || !state.englishCopy?.reviewed)) {
-        notice('Vérifiez et confirmez la copie anglaise avant de créer son PDF.');
-        document.querySelector('.english-review')?.scrollIntoView({ block: 'nearest' });
+      if (englishMode && !englishComplete()) {
+        notice('La version anglaise est incomplète ou périmée. Cliquez sur English pour la retraduire.');
         return false;
       }
       showValidation = true;
@@ -549,6 +554,11 @@
       try {
         if (!await flushChanges()) return;
         setBusy(true);
+        if (englishMode && state.englishCopy && !state.englishCopy.reviewed) {
+          state.englishCopy.reviewed = true;
+          markDirty();
+          if (!await saveNow(true)) throw new Error('La version anglaise n’a pas pu être enregistrée.');
+        }
         const draft = copy(state);
         const expectedInvoiceNumber = draft.kind === 'facture' ? Number(draft.invoiceNumber) : null;
         if (draft.kind === 'facture' && (!Number.isInteger(expectedInvoiceNumber) || expectedInvoiceNumber <= 0)) {
@@ -871,9 +881,10 @@
     }
     async function translateEnglish() {
       if (busy) return;
-      if (state.englishCopy?.reviewed && !confirm('Remplacer la copie anglaise déjà vérifiée ? Elle restera dans les versions précédentes du document.')) return;
       translationError = '';
       if (!await flushChanges()) return;
+      translationLoading = true;
+      render();
       setBusy(true);
       try {
         const source = copy(state);
@@ -886,14 +897,35 @@
           project: String(proposed.project ?? ''), notes: String(proposed.notes ?? ''),
           descriptions: proposed.descriptions.map(text => String(text ?? '')), reviewed: false };
         englishMode = true;
+        translationLoading = false;
         markDirty();
         render();
         if (!await saveNow(true)) throw new Error('La copie anglaise n’a pas pu être enregistrée.');
-        notice('Copie anglaise créée. Relisez-la et confirmez-la avant le PDF.');
-        document.querySelector('.english-review')?.scrollIntoView({ block: 'nearest' });
+        notice('Version anglaise affichée. Relisez l’aperçu avant de créer le PDF.');
       } catch (error) {
         translationError = `Traduction impossible : ${errorText(error)}`;
+        translationLoading = false;
+        englishMode = false;
+        outputStatus = translationError;
         render();
+        notice(translationError);
+      } finally { setBusy(false); }
+    }
+    async function applyNumberChoice(selectedNumber) {
+      if (!await flushChanges()) return;
+      setBusy(true);
+      try {
+        const reused = selectedNumber < nextInvoiceNumber || records.some(record => record.draft.issuedNumber === selectedNumber);
+        const snapshot = await runCommand('set_next_invoice_number', { number: selectedNumber, allowReuse: reused });
+        applySnapshot(snapshot); numberConfirm = null; numberEditing = false; numberError = ''; render();
+        document.querySelector('[data-edit-number]')?.focus();
+        notice(reused ? `Facture n° ${selectedNumber} prête. Prochain numéro automatique : ${nextInvoiceNumber}.` : `Prochain numéro de facture : ${nextInvoiceNumber}.`);
+      } catch (error) {
+        numberError = `Numéro inchangé : ${errorText(error)}`;
+        numberConfirm = null; render();
+        const input = document.getElementById('next-number');
+        if (input) input.value = String(selectedNumber);
+        input?.focus();
       } finally { setBusy(false); }
     }
     async function chooseFolder(useDefault = false) {
@@ -1087,18 +1119,11 @@
       if (b.hasAttribute('data-close-folder')) { closeFolder(); return; }
       if (b.hasAttribute('data-choose-folder')) { await chooseFolder(); return; }
       if (b.hasAttribute('data-default-folder')) { await chooseFolder(true); return; }
-      if (b.hasAttribute('data-translate')) { await translateEnglish(); return; }
       if (b.hasAttribute('data-show-french')) { englishMode = false; translationError = ''; render(); return; }
-      if (b.hasAttribute('data-show-english')) { englishMode = true; translationError = ''; render(); return; }
-      if (b.hasAttribute('data-accept-english')) {
-        if (!englishCurrent() || !state.englishCopy) { notice('Actualisez la traduction après les changements en français.'); return; }
-        if (state.englishCopy.descriptions.some(text => !String(text).trim()) ||
-          (state.project.trim() && !state.englishCopy.project.trim()) ||
-          (state.notes.trim() && !state.englishCopy.notes.trim())) {
-          notice('Complétez les textes anglais avant de confirmer.'); return;
-        }
-        rememberUndo(); state.englishCopy.reviewed = true; markDirty(); render();
-        if (await saveNow(true)) notice('Copie anglaise vérifiée et enregistrée.');
+      if (b.hasAttribute('data-show-english')) {
+        if (englishMode && englishComplete()) return;
+        if (englishComplete()) { englishMode = true; translationError = ''; render(); }
+        else await translateEnglish();
         return;
       }
       if (b.hasAttribute('data-recent')) {
@@ -1114,37 +1139,32 @@
         numberEditing = true; numberConfirm = null; numberError = '';
         render(); document.getElementById('next-number')?.focus(); return;
       }
-      if (b.hasAttribute('data-close-number')) {
-        numberEditing = false; numberConfirm = null; numberError = '';
-        render(); document.querySelector('[data-edit-number]')?.focus(); return;
-      }
       if (b.dataset.numberStep) {
         const input = document.getElementById('next-number');
         if (b.dataset.numberStep === '1') input?.stepUp(); else input?.stepDown();
-        numberError = ''; input?.focus(); return;
+        numberError = ''; document.querySelector('.number-popover.number-error')?.remove(); input?.focus(); return;
       }
       if (b.hasAttribute('data-stage-number')) {
         const number = Number(document.getElementById('next-number')?.value);
         if (!Number.isSafeInteger(number) || number <= 0) { numberError = 'Entrez un numéro entier positif.'; render(); document.getElementById('next-number')?.focus(); return; }
-        if (number === nextInvoiceNumber && (state.issuedNumber || state.invoiceNumber === nextInvoiceNumber)) { numberError = 'Ce numéro est déjà le prochain numéro.'; render(); document.getElementById('next-number')?.focus(); return; }
+        if (number === (state.issuedNumber ? nextInvoiceNumber : state.invoiceNumber)) {
+          numberEditing = false; numberError = ''; render(); document.querySelector('[data-edit-number]')?.focus(); return;
+        }
         numberError = '';
-        numberConfirm = number;
-        render(); document.querySelector('[data-apply-number]')?.focus();
+        if (number < nextInvoiceNumber || records.some(record => record.draft.issuedNumber === number)) {
+          numberConfirm = number; render(); document.querySelector('[data-apply-number]')?.focus();
+        } else await applyNumberChoice(number);
         return;
       }
-      if (b.hasAttribute('data-cancel-number')) { numberConfirm = null; render(); document.getElementById('next-number')?.focus(); return; }
+      if (b.hasAttribute('data-cancel-number')) {
+        const candidate = numberConfirm;
+        numberConfirm = null; render();
+        const input = document.getElementById('next-number');
+        if (input && candidate !== null) input.value = String(candidate);
+        input?.focus(); return;
+      }
       if (b.hasAttribute('data-apply-number')) {
-        if (numberConfirm === null || !await flushChanges()) return;
-        setBusy(true);
-        try {
-          const selectedNumber = numberConfirm;
-          const reused = selectedNumber < nextInvoiceNumber || records.some(record => record.draft.issuedNumber === selectedNumber);
-          const snapshot = await runCommand('set_next_invoice_number', { number: selectedNumber, allowReuse: reused });
-          applySnapshot(snapshot); numberConfirm = null; numberEditing = false; numberError = ''; render();
-          document.querySelector('[data-edit-number]')?.focus();
-          notice(reused ? `Facture n° ${selectedNumber} prête. Prochain numéro automatique : ${nextInvoiceNumber}.` : `Prochain numéro de facture : ${nextInvoiceNumber}.`);
-        } catch (error) { numberError = `Numéro inchangé : ${errorText(error)}`; numberConfirm = null; render(); document.getElementById('next-number')?.focus(); }
-        finally { setBusy(false); }
+        if (numberConfirm !== null) await applyNumberChoice(numberConfirm);
         return;
       }
       if (b.dataset.openRecord) {
@@ -1214,26 +1234,16 @@
         return;
       }
       if (!state || busy) return;
+      if (el.id === 'next-number') {
+        numberError = '';
+        document.querySelector('.number-popover.number-error')?.remove();
+        return;
+      }
       if (el.hasAttribute('data-assist-proposal')) {
         if (lineAssist && !lineAssist.recording && !lineAssist.processing) {
           lineAssist.proposal = el.value;
           fitTextareas(el.parentElement);
         }
-        return;
-      }
-      if (el.hasAttribute('data-en-field') || el.hasAttribute('data-en-item')) {
-        const en = state.englishCopy;
-        if (!en) return;
-        rememberUndo(`${state.id}:english:${el.dataset.enField ?? el.dataset.enItem}`);
-        if (el.dataset.enField) en[el.dataset.enField] = el.value;
-        else en.descriptions[Number(el.dataset.enItem)] = el.value;
-        en.reviewed = false;
-        sync(); markDirty();
-        const reviewButton = document.querySelector('[data-accept-english]');
-        if (reviewButton) reviewButton.textContent = 'Confirmer cette copie';
-        const status = document.querySelector('.language-action small');
-        if (status) status.textContent = 'Relisez et confirmez la copie anglaise avant le PDF.';
-        if (el.tagName === 'TEXTAREA') fitTextareas(el.parentElement);
         return;
       }
       if (el.dataset.field) {
@@ -1249,15 +1259,19 @@
         releaseVoiceItem(voiceSession, index, el.dataset.key);
         releaseVoiceItem(voiceRecovery?.session, index, el.dataset.key);
       } else return;
+      const wasEnglish = englishMode;
+      markDirty();
+      if (wasEnglish && !englishMode) {
+        const paper = document.querySelector('.preview');
+        if (paper) paper.innerHTML = preview();
+        for (const [selector, selected] of [['[data-show-french]', true], ['[data-show-english]', false]]) {
+          const button = document.querySelector(selector);
+          button?.classList.toggle('active', selected);
+          button?.setAttribute('aria-pressed', String(selected));
+        }
+      }
       sync();
       paintValidation();
-      markDirty();
-      if (englishMode && !englishCurrent()) {
-        const status = document.querySelector('.language-action small');
-        if (status) status.textContent = 'Le français a changé. La copie anglaise doit être actualisée.';
-        const reviewButton = document.querySelector('[data-accept-english]');
-        if (reviewButton) reviewButton.disabled = true;
-      }
       if (el.tagName === 'TEXTAREA') fitTextareas(el.parentElement);
     });
     document.addEventListener('change', event => {
@@ -1283,12 +1297,19 @@
       document.querySelectorAll(`[data-calendar="${field}"], [data-date-display="${field}"]`).forEach(el => el.setAttribute('aria-expanded', 'false'));
     });
     document.addEventListener('focusout', event => {
-      if (event.target.dataset.field || event.target.dataset.item !== undefined || event.target.dataset.enField || event.target.dataset.enItem !== undefined) {
+      if (event.target.dataset.field || event.target.dataset.item !== undefined) {
         undoGroup = null;
         void saveNow();
       }
     });
     document.addEventListener('keydown', event => {
+      if (event.target.id === 'next-number') {
+        if (event.key === 'Enter') { event.preventDefault(); document.querySelector('[data-stage-number]')?.click(); return; }
+        if (event.key === 'Escape') {
+          event.preventDefault(); numberEditing = false; numberConfirm = null; numberError = '';
+          render(); document.querySelector('[data-edit-number]')?.focus(); return;
+        }
+      }
       if (event.target.dataset?.dateDisplay && (event.key === 'Enter' || event.key === ' ')) {
         event.preventDefault(); toggleCalendar(event.target.dataset.dateDisplay); return;
       }

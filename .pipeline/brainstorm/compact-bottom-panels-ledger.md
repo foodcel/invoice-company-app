@@ -27,6 +27,6 @@ Date: 2026-09-29. Active surface: the installed Windows app, editor footer and S
 
 The original ten options remain in [compact-panels.html](../../mockups/compact-panels.html). The user selected N2 and E2 with the refinements above. The focused, interactive [N2 + E2 mockup](../../mockups/compact-panels-n2-e2.html) shows both cards together, number editing and language switching.
 
-## Open choice
+## Approved and implemented
 
-The user reviews the N2 + E2 mockup and confirms or corrects it. The production footer remains intact until that confirmation. The save status merge is independent and already present in v0.1.9.
+The user confirmed the focused N2 + E2 mockup and asked for both panels next to each other in one row. Production uses N2's inline number view/edit control and E2's full-panel Français / English switch. English selection creates or opens the translation in the preview; the existing Create PDF action confirms it for export. A reused invoice number still requires its warning and confirmation. The independent save status merge was already present in v0.1.9.

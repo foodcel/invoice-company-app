@@ -414,7 +414,7 @@ function drawFooters(doc, context) {
   });
 }
 
-/** Render the supplied draft as-is; English customer text must already be reviewed. */
+/** Render the supplied draft as-is; the caller is responsible for the selected customer text. */
 export async function createPdf(draft, { invoiceNumber = null, language = 'fr' } = {}) {
   if (language !== 'fr' && language !== 'en') throw new Error('Langue PDF non prise en charge.');
   if (!draft || (draft.kind !== 'soumission' && draft.kind !== 'facture')) throw new Error('Type de document invalide.');

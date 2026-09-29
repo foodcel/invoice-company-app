@@ -19,7 +19,7 @@ Scope: Save and export reviewed English customer copies while preserving the Fre
   EXPECT: test result: ok.
   EVIDENCE: scripts\check-rust.cmd passed 16 tests for v0.1.5.
 
-- [x] G4: A saved English copy can be reopened, edited, exported, and does not overwrite the French draft
+- [x] G4: A saved English copy can be reopened and exported without overwriting the French draft
   EVIDENCE: reviewed_english_copy_survives_reopen_and_shares_one_invoice_number and stale-copy tests passed; English invoice PDF rendered and its identifiers, amounts and line text were extracted.
 
 - [ ] G5: Provider credentials stay out of source, drafts, backups, and exported PDFs
