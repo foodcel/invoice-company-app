@@ -52,6 +52,11 @@
     .seg > :first-child { border-radius: 8px 0 0 8px; }
     .seg > :last-child { border-radius: 0 8px 8px 0; margin-left: -1px; }
     .seg .selected { background: #dcebe0; color: #226b5b; border-color: #87b9a3; }
+    .language-toggle { height: 68px; padding: 5px; }
+    .seg-fill { display: grid; grid-template-columns: 1fr 1fr; width: 100%; height: 100%; }
+    .seg-fill button { height: 100%; border: 0; background: transparent; font-size: 13px; }
+    .seg-fill > :first-child, .seg-fill > :last-child { border-radius: 7px; margin: 0; }
+    .seg-fill .selected { background: #dcebe0; box-shadow: inset 0 0 0 1px #87b9a3; }
     @media (max-width: 700px) { .option-body { grid-template-columns: 1fr; gap: 12px; } .sample { min-height: auto; } .panel { width: 100%; } }
   </style>
 </head>
@@ -59,18 +64,18 @@
 <main>
   <h1>Deux petits panneaux, dix façons de les présenter</h1>
   <p class="intro">Propositions visuelles pour choisir la prochaine version. Chaque exemple garde les deux panneaux côte à côte dans l’application. La colonne de droite montre l’état après modification ou traduction.</p>
-  <nav><a href="#numero">Numéro de facture · 5 options</a><a href="#anglais">Copie anglaise · 5 options</a></nav>
+  <nav><a href="compact-panels-n2-e2.html">Voir N2 + E2 modifiés</a><a href="#numero">Numéro de facture · 5 options</a><a href="#anglais">Copie anglaise · 5 options</a></nav>
 
   <h2 id="numero">Numéro de facture</h2>
   <p class="section-note">Même règle pour les cinq&nbsp;: réutiliser un numéro exige un avertissement et une confirmation; aucun ancien PDF n’est remplacé.</p>
   <div class="options">
-    <article class="option recommended"><div class="option-head"><b>N1 · Ligne simple</b><span class="tag">Recommandé</span></div><div class="option-body">
+    <article class="option"><div class="option-head"><b>N1 · Ligne simple</b></div><div class="option-body">
       <div><span class="sample-label">Au repos</span><div class="sample"><div class="panel row between"><span><small>Facture n°</small><br><span class="number">2061</span></span><button>Modifier</button></div></div></div>
       <div><span class="sample-label">Après Modifier</span><div class="sample"><div class="panel stack"><small>Numéro de cette facture</small><div class="row"><input aria-label="Numéro" value="2061"><button class="primary">✓</button><button class="icon" aria-label="Annuler">×</button></div></div></div></div>
     </div><p class="option-note">Le numéro devient un champ dans la même carte; pas de nouvelle grande section.</p></article>
 
-    <article class="option"><div class="option-head"><b>N2 · Champ toujours visible</b></div><div class="option-body">
-      <div><span class="sample-label">Au repos</span><div class="sample"><div class="panel row between"><span><small>N° de facture</small><br><span class="small-number">2061</span></span><button class="icon" aria-label="Modifier">✎</button></div></div></div>
+    <article class="option recommended"><div class="option-head"><b>N2 · Champ toujours visible</b><span class="tag">Votre choix · à confirmer</span></div><div class="option-body">
+      <div><span class="sample-label">Au repos</span><div class="sample"><div class="panel row"><span class="dim">N°</span><span class="small-number">2061</span><button class="icon push" aria-label="Modifier">✎</button></div></div></div>
       <div><span class="sample-label">Après Modifier</span><div class="sample"><div class="panel row wrap"><span class="dim">N°</span><input aria-label="Numéro" value="2061"><button class="icon" aria-label="Diminuer">−</button><button class="icon" aria-label="Augmenter">+</button><button class="primary">OK</button></div></div></div>
     </div><p class="option-note">Garde les flèches manuelles et évite tout texte d’aide permanent.</p></article>
 
@@ -92,17 +97,17 @@
   <div class="warning"><strong>Si le numéro existe déjà&nbsp;:</strong> une courte confirmation apparaît dans cette même carte&nbsp;: «&nbsp;2060 est déjà utilisé. Réutiliser ce numéro&nbsp;?&nbsp;» avec <b>Confirmer</b> et <b>Annuler</b>.</div>
 
   <h2 id="anglais">Copie anglaise</h2>
-  <p class="section-note">La traduction reste une copie à relire. Le bouton de vérification peut ouvrir l’espace de relecture existant sans agrandir ce petit panneau.</p>
+  <p class="section-note">La copie anglaise doit être relue avant le PDF. Les options présentent différentes façons de choisir la langue et de vérifier le résultat.</p>
   <div class="options">
-    <article class="option recommended"><div class="option-head"><b>E1 · Langue du PDF</b><span class="tag">Recommandé</span></div><div class="option-body">
+    <article class="option"><div class="option-head"><b>E1 · Langue du PDF</b></div><div class="option-body">
       <div><span class="sample-label">Français</span><div class="sample"><div class="panel white row between"><span><small>Langue du PDF</small><br><strong>Français</strong></span><button>Traduire en anglais</button></div></div></div>
       <div><span class="sample-label">Copie créée</span><div class="sample"><div class="panel white row between"><span><small>Copie anglaise</small><br><strong>À vérifier</strong></span><button class="primary">Vérifier</button></div></div></div>
     </div><p class="option-note">Une ligne lisible, sans phrase secondaire; le vrai travail de relecture s’ouvre au besoin.</p></article>
 
-    <article class="option"><div class="option-head"><b>E2 · Deux langues côte à côte</b></div><div class="option-body">
-      <div><span class="sample-label">Français</span><div class="sample"><div class="panel white stack"><small>Copie pour le client</small><div class="seg"><button class="selected">Français</button><button>English +</button></div></div></div></div>
-      <div><span class="sample-label">Copie créée</span><div class="sample"><div class="panel white row wrap"><div class="seg"><button>Français</button><button class="selected">English</button></div><button>Vérifier</button></div></div></div>
-    </div><p class="option-note">Visuel de sélection de langue, mais «&nbsp;English&nbsp;» doit lancer une vraie traduction.</p></article>
+    <article class="option recommended"><div class="option-head"><b>E2 · Deux langues côte à côte</b><span class="tag">Votre choix · à confirmer</span></div><div class="option-body">
+      <div><span class="sample-label">Par défaut</span><div class="sample"><div class="panel white language-toggle"><div class="seg seg-fill"><button class="selected" aria-pressed="true">Français</button><button aria-pressed="false">English</button></div></div></div></div>
+      <div><span class="sample-label">Après English</span><div class="sample"><div class="panel white language-toggle"><div class="seg seg-fill"><button aria-pressed="false">Français</button><button class="selected" aria-pressed="true">English</button></div></div></div></div>
+    </div><p class="option-note">Les deux langues remplissent la carte. English lance la traduction; Dad relit le résultat dans l’aperçu, puis crée le PDF dans la langue choisie.</p></article>
 
     <article class="option"><div class="option-head"><b>E3 · Bouton de traduction</b></div><div class="option-body">
       <div><span class="sample-label">Français</span><div class="sample"><div class="panel white row between"><span class="chip">FR</span><button>FR → EN</button></div></div></div>

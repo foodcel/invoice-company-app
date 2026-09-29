@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>N2 + E2 · Panneaux compacts</title>
+  <style>
+    :root { font-family: "Segoe UI", Aptos, Arial, sans-serif; color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f6f2eb; color: #23302c; }
+    button, input { font: inherit; }
+    button { cursor: pointer; transition: background .16s ease, box-shadow .16s ease, border-color .16s ease, transform .16s ease; }
+    button:hover { box-shadow: inset 0 0 0 2px #42a87538; }
+    button:active { transform: translateY(1px); }
+    button:focus-visible, input:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #448ad7; }
+    main { max-width: 840px; margin: 0 auto; padding: 40px 25px 70px; }
+    .eyebrow { margin: 0 0 7px; color: #226b5b; font-size: 12px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(27px, 4vw, 37px); line-height: 1.13; letter-spacing: -.035em; }
+    .intro { max-width: 700px; margin: 11px 0 0; color: #64726d; line-height: 1.55; font-size: 14px; }
+    .demo { margin-top: 28px; padding: 24px; border-radius: 18px; border: 1px solid #d9ded8; background: white; box-shadow: 0 12px 40px #2a39321a; }
+    .demo-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 17px; }
+    h2 { margin: 0; font-size: 19px; letter-spacing: -.02em; }
+    .mockup-label { color: #64726d; font-size: 11px; font-weight: 700; }
+    .summary-section { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; max-width: 620px; }
+    .invoice-number, .language-panel { min-width: 0; height: 70px; border: 1px solid #d9ded8; border-radius: 11px; }
+    .invoice-number { padding: 9px 12px; display: flex; align-items: center; background: #e9f3ec; }
+    .number-row { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }
+    .number-label { flex: none; color: #64726d; font-size: 13px; font-weight: 700; }
+    .number-value { color: #23302c; font-size: 20px; line-height: 1; font-weight: 800; }
+    .number-row button, .number-row input { height: 36px; border: 1px solid #d9ded8; border-radius: 8px; background: #fffdfa; color: #23302c; }
+    .number-row button { min-width: 34px; padding: 0 7px; font-size: 16px; font-weight: 700; }
+    .number-row .edit-button { margin-left: auto; }
+    .number-row .apply-button { min-width: 40px; background: #287457; color: white; border-color: #287457; font-size: 12px; }
+    .number-row input { width: 75px; min-width: 0; padding: 0 7px; font-size: 15px; }
+    .number-row input::-webkit-inner-spin-button, .number-row input::-webkit-outer-spin-button { display: none; }
+    .number-row input[type=number] { appearance: textfield; -moz-appearance: textfield; }
+    .language-panel { padding: 5px; background: #fffdfa; }
+    .language-toggle { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; height: 100%; gap: 4px; }
+    .language-toggle button { height: 100%; min-width: 0; border: 0; border-radius: 7px; background: transparent; color: #64726d; font-size: 14px; font-weight: 750; }
+    .language-toggle button.active { background: #dcebe0; color: #226b5b; box-shadow: inset 0 0 0 1px #87b9a3; }
+    .language-toggle button.active:hover { box-shadow: inset 0 0 0 2px #6da68f; }
+    .warning { margin-top: 10px; padding: 11px; border: 1px solid #e8c98e; border-radius: 9px; background: #fff2dd; color: #654318; font-size: 12px; }
+    .warning p { margin: 0 0 8px; line-height: 1.4; }
+    .warning button { min-height: 32px; margin-right: 6px; padding: 0 9px; border-radius: 7px; border: 1px solid #d5b579; background: white; color: #654318; font-size: 12px; font-weight: 700; }
+    .warning button.confirm { background: #287457; border-color: #287457; color: white; }
+    .hint { margin: 12px 0 0; color: #64726d; font-size: 12px; }
+    .preview { max-width: 420px; margin-top: 25px; padding: 16px 18px; border-radius: 11px; border: 1px solid #e0e5de; background: #fffdfa; }
+    .preview-kicker { color: #64726d; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+    .preview h3 { margin: 8px 0 2px; font-size: 21px; }
+    .preview p { margin: 0; color: #64726d; font-size: 12px; }
+    .preview-rule { height: 1px; margin: 14px 0 9px; background: #d9ded8; }
+    .preview-line { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+    .preview-line strong { color: #23302c; }
+    .under-note { margin: 16px 0 0; color: #64726d; font-size: 12px; line-height: 1.5; }
+    .under-note a { color: #226b5b; font-weight: 700; }
+    [hidden] { display: none !important; }
+    @media (max-width: 650px) {
+      main { padding: 25px 14px 50px; }
+      .demo { padding: 17px; }
+      .summary-section { grid-template-columns: 1fr; }
+      .invoice-number, .language-panel { width: 100%; }
+    }
+    @media (max-width: 350px) { .number-row { gap: 5px; } .number-row input { width: 65px; } .number-row button { min-width: 30px; } }
+  </style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">Maquette à confirmer · N2 + E2</p>
+  <h1>Le numéro et la langue, sans espace de trop</h1>
+  <p class="intro">Cliquez le crayon pour voir le numéro modifiable. Cliquez English pour voir le changement de langue. Cette maquette simule la traduction; elle ne modifie pas l’application installée.</p>
+  <section class="demo" aria-label="Aperçu interactif des deux panneaux">
+    <div class="demo-head"><h2>Fin du formulaire</h2><span class="mockup-label">Facture · exemple</span></div>
+    <div class="summary-section">
+      <div>
+        <div class="invoice-number" aria-label="Numéro de facture">
+          <div class="number-row" id="number-view"><span class="number-label">N°</span><strong class="number-value" id="number-value">2061</strong><button type="button" class="edit-button" id="edit-number" aria-label="Modifier le numéro" title="Modifier le numéro">✎</button></div>
+          <div class="number-row" id="number-edit" hidden><label class="number-label" for="number-input">N°</label><input id="number-input" type="number" min="1" step="1" value="2061"><button type="button" id="step-down" aria-label="Diminuer le numéro">−</button><button type="button" id="step-up" aria-label="Augmenter le numéro">+</button><button type="button" class="apply-button" id="apply-number">OK</button></div>
+        </div>
+        <div class="warning" id="used-warning" role="alert" hidden><p>Le n° 2060 est déjà utilisé. Vous pouvez le réutiliser; l’ancien PDF restera intact.</p><button type="button" class="confirm" id="confirm-reuse">Réutiliser 2060</button><button type="button" id="cancel-reuse">Annuler</button></div>
+      </div>
+      <div class="language-panel"><div class="language-toggle" role="group" aria-label="Langue du PDF"><button type="button" id="french" class="active" aria-pressed="true">Français</button><button type="button" id="english" aria-pressed="false">English</button></div></div>
+    </div>
+    <p class="hint">Le bouton « Créer le PDF » reste sous ces deux panneaux dans l’application.</p>
+    <div class="preview" aria-live="polite"><span class="preview-kicker">Aperçu simulé</span><h3 id="preview-title">Facture</h3><p id="preview-number">Facture n° 2061</p><div class="preview-rule"></div><div class="preview-line"><strong id="preview-label">Travaux et articles</strong><span id="preview-text">Travail d’ébénisterie</span></div></div>
+  </section>
+  <p class="under-note">La mise en page du reste de l’application demeure comme aujourd’hui. <a href="compact-panels.html">Revenir aux dix options</a>.</p>
+</main>
+<script>
+  const byId = id => document.getElementById(id);
+  let number = 2061;
+  let language = 'fr';
+  function updatePreview() {
+    byId('number-value').textContent = String(number);
+    byId('preview-title').textContent = language === 'fr' ? 'Facture' : 'Invoice';
+    byId('preview-number').textContent = `${language === 'fr' ? 'Facture n°' : 'Invoice no.'} ${number}`;
+    byId('preview-label').textContent = language === 'fr' ? 'Travaux et articles' : 'Work and items';
+    byId('preview-text').textContent = language === 'fr' ? 'Travail d’ébénisterie' : 'Cabinetmaking work';
+  }
+  function selectLanguage(next) {
+    language = next;
+    for (const [id, value] of [['french', 'fr'], ['english', 'en']]) {
+      byId(id).classList.toggle('active', next === value);
+      byId(id).setAttribute('aria-pressed', String(next === value));
+    }
+    updatePreview();
+  }
+  function commitNumber(value) {
+    number = value;
+    byId('used-warning').hidden = true;
+    byId('number-edit').hidden = true;
+    byId('number-view').hidden = false;
+    updatePreview();
+  }
+  byId('edit-number').addEventListener('click', () => {
+    byId('number-input').value = String(number);
+    byId('number-view').hidden = true;
+    byId('number-edit').hidden = false;
+    byId('number-input').focus();
+  });
+  byId('step-down').addEventListener('click', () => { byId('number-input').value = String(Math.max(1, Number(byId('number-input').value || number) - 1)); });
+  byId('step-up').addEventListener('click', () => { byId('number-input').value = String(Number(byId('number-input').value || number) + 1); });
+  byId('apply-number').addEventListener('click', () => {
+    const value = Number(byId('number-input').value);
+    if (!Number.isSafeInteger(value) || value < 1) { byId('number-input').focus(); return; }
+    if (value === 2060) { byId('used-warning').hidden = false; return; }
+    commitNumber(value);
+  });
+  byId('confirm-reuse').addEventListener('click', () => commitNumber(2060));
+  byId('cancel-reuse').addEventListener('click', () => { byId('used-warning').hidden = true; byId('number-input').focus(); });
+  byId('number-input').addEventListener('keydown', event => {
+    if (event.key === 'Enter') byId('apply-number').click();
+    if (event.key === 'Escape') { byId('used-warning').hidden = true; byId('number-edit').hidden = true; byId('number-view').hidden = false; byId('edit-number').focus(); }
+  });
+  byId('french').addEventListener('click', () => selectLanguage('fr'));
+  byId('english').addEventListener('click', () => selectLanguage('en'));
+</script>
+</body>
+</html>

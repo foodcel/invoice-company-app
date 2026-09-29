@@ -13,7 +13,11 @@ Date: 2026-09-29. Active surface: the installed Windows app, editor footer and S
 | 6 | “when you hover ... save automatically” | Explain automatic local saving in the button tooltip. | confirmed |
 | 7 | “how do you know when a draft gets saved? ... what's the time?” | Show pending, saving, success and failure on the button; include last confirmed save time in the tooltip. | confirmed |
 | 8 | “would the button just start ... rotating?” | Animate only a small status badge during an active save, keeping the main button still and clickable. | confirmed |
-| 9 | “I'll choose” (implied by requesting proposals) | Wait for the chosen number and language looks before changing the production footer layout. | pending user choice |
+| 9 | “I like N2 ... I like E2” | Use N2 and E2 as the selected directions for a focused mockup; wait for explicit confirmation before implementing them in the app. | corrected |
+| 10 | “N ... on the left, just like ... click modify” | Put N° to the left of 2061 in both N2's normal and edit states. | confirmed |
+| 11 | “options are just French, English ... no other buttons” | Make E2 a full-card, equal-width Français / English switch with no title or secondary button inside the panel. | confirmed |
+| 12 | “default's gonna be French ... click English ... look at it ... save it” | French is selected initially; selecting English changes the document preview, which Dad can inspect before using the existing PDF action. | confirmed |
+| 13 | “generate both mockups ... then I'll confirm ... implemented directly in the app” | Deliver mockups now; production implementation waits for the user's review. | confirmed |
 
 ## Grounding
 
@@ -21,8 +25,8 @@ Date: 2026-09-29. Active surface: the installed Windows app, editor footer and S
 
 ## Options
 
-The ten concrete visual proposals are in [compact-panels.html](../../mockups/compact-panels.html). Recommended pair: N1 (simple number line with inline edit) and E1 (one-row PDF language control). Both keep plain French labels and avoid hiding the action behind an icon.
+The original ten options remain in [compact-panels.html](../../mockups/compact-panels.html). The user selected N2 and E2 with the refinements above. The focused, interactive [N2 + E2 mockup](../../mockups/compact-panels-n2-e2.html) shows both cards together, number editing and language switching.
 
 ## Open choice
 
-User chooses N1–N5 and E1–E5. The current footer remains intact until that choice. The save status merge is independent of the choice and is implemented in the app source.
+The user reviews the N2 + E2 mockup and confirms or corrects it. The production footer remains intact until that confirmation. The save status merge is independent and already present in v0.1.9.
