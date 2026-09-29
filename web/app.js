@@ -62,7 +62,7 @@
     let numberConfirm = null;
     let numberEditing = false;
     let numberError = '';
-    let saveStatus = 'Brouillon chargé';
+    let saveStatus = 'Brouillon enregistré';
     let outputStatus = '';
     const copy = value => JSON.parse(JSON.stringify(value));
     const errorText = error => String(error?.message || error || 'Erreur inconnue');
@@ -98,7 +98,12 @@
     function setSaveStatus(message) {
       saveStatus = message;
       const el = document.getElementById('save-status');
-      if (el) el.textContent = message;
+      if (el) {
+        el.querySelector('.sr-only').textContent = message;
+        el.setAttribute('aria-label', message);
+        el.title = message === 'Brouillon enregistré' ? 'Brouillon enregistré automatiquement sur cet ordinateur.' : message;
+        el.dataset.state = message.includes('Échec') ? 'error' : message === 'Brouillon enregistré' ? 'saved' : 'pending';
+      }
     }
     async function saveNow(force = false) {
       clearTimeout(saveTimer);
@@ -237,7 +242,7 @@
       const en = englishMode && Boolean(state.englishCopy);
       const footerIds = en ? '<span>GST 848045563 RT0001</span><span>QST 1212260726 TQ0001</span>' : taxIds;
       const invoice = state.kind === 'facture';
-      const number = invoice ? `<small>${en ? 'Invoice no.' : 'Facture n°'} <span data-preview="invoiceNumber">${state.invoiceNumber ?? '—'}</span>${state.issuedNumber ? '' : `<span class="preview-only"> · ${en ? 'proposed number' : 'numéro proposé'}</span>`}</small>` : '';
+      const number = invoice ? `<small>${en ? 'Invoice no.' : 'Facture n°'} <span data-preview="invoiceNumber">${state.invoiceNumber ?? '—'}</span></small>` : '';
       const dateLabel = invoice ? (en ? 'Payment due' : 'Date limite de paiement') : (en ? 'Valid until' : 'Valide jusqu’au');
       const dateField = invoice ? 'dueDate' : 'validUntil';
       const hasDeposit = deposit() > 0;
@@ -317,7 +322,7 @@
       }
       const heading = document.querySelector('.items-section .table-head small');
       if (heading) heading.textContent = 'Microphone pour dicter · Étoiles pour améliorer';
-      const statusAnchor = document.getElementById('save-status');
+      const statusAnchor = document.querySelector('.section-head');
       if (statusAnchor) {
         const recovery = voiceRecovery?.session?.transcript;
         statusAnchor.insertAdjacentHTML('afterend', `${voiceStatus ? `<p class="voice-status" role="status" aria-live="polite">${esc(voiceStatus)}</p>` : ''}${voiceSession ? `<div class="voice-live" aria-label="Paroles reconnues pendant la dictée"><strong>Ce que j’entends</strong><p data-live-transcript aria-live="polite">${esc(voiceLiveText || 'Parlez maintenant…')}</p></div>` : ''}${recovery ? `<div class="voice-recovery" role="alert"><strong>Paroles reconnues à vérifier</strong><p>L’analyse a échoué. Votre texte reconnu reste disponible ici.</p><textarea readonly rows="3" aria-label="Paroles reconnues">${esc(recovery)}</textarea><div><button type="button" class="plain-button" data-retry-document-voice ${voiceRetryBusy ? 'disabled' : ''}>Réessayer le remplissage</button><button type="button" class="plain-button" data-copy-voice ${voiceRetryBusy ? 'disabled' : ''}>Copier le texte</button><button type="button" class="plain-button" data-dismiss-voice ${voiceRetryBusy ? 'disabled' : ''}>Fermer</button></div></div>` : ''}`);
@@ -369,7 +374,12 @@
     function invoiceNumberControl() {
       if (state.kind !== 'facture') return '';
       const issued = Boolean(state.issuedNumber);
-      return `<div class="invoice-number"><div class="invoice-number-top"><span>Numéro de facture ${issued ? 'émise' : 'proposé'} : <strong>n° <span data-preview="invoiceNumber">${state.invoiceNumber ?? '—'}</span></strong></span><button type="button" class="plain-button" data-edit-number>${issued ? 'Régler le prochain n°' : 'Modifier le n°'}</button></div>${numberEditing ? `<div class="next-number-form" id="next-number-form"><label for="next-number">Prochain numéro de facture</label><div class="number-entry"><input id="next-number" name="number" type="number" min="1" step="1" value="${esc(numberConfirm ?? nextInvoiceNumber ?? '')}" required aria-describedby="next-number-help" ${numberConfirm === null ? '' : 'readonly'}>${numberConfirm === null ? '<button type="button" class="plain-button number-step" data-number-step="-1" aria-label="Diminuer le prochain numéro de facture">−</button><button type="button" class="plain-button number-step" data-number-step="1" aria-label="Augmenter le prochain numéro de facture">+</button><button type="button" class="primary" data-stage-number>Appliquer</button>' : ''}<button type="button" class="plain-button" data-close-number>Fermer</button></div><small id="next-number-help">Ce réglage s'applique aux prochaines factures. Les numéros déjà émis restent inchangés.</small>${numberError ? `<p class="number-error" role="alert">${esc(numberError)}</p>` : ''}${numberConfirm === null ? '' : `<div class="number-confirm" role="group" aria-label="Confirmer le prochain numéro"><strong>Définir ${numberConfirm} comme prochain numéro ?</strong><div><button type="button" class="primary" data-apply-number>Confirmer</button><button type="button" class="plain-button" data-cancel-number>Annuler</button></div></div>`}</div>` : ''}</div>`;
+      const used = numberConfirm !== null && records.some(record => record.draft.issuedNumber === numberConfirm);
+      const older = numberConfirm !== null && numberConfirm < nextInvoiceNumber;
+      const warning = used
+        ? `La facture n° ${numberConfirm} existe déjà. Vous pouvez réutiliser ce numéro pour ${issued ? 'une nouvelle facture' : 'ce brouillon'}. L’ancien PDF restera intact; la nouvelle copie aura un nom de fichier distinct.`
+        : older ? `Le n° ${numberConfirm} est inférieur au prochain numéro automatique. Il sera réservé à ${issued ? 'une nouvelle facture' : 'ce brouillon'}; le prochain numéro automatique restera ${nextInvoiceNumber}.` : '';
+      return `<div class="invoice-number"><div class="invoice-number-top"><span>Numéro de facture ${issued ? 'émise' : 'proposé'} : <strong>n° <span data-preview="invoiceNumber">${state.invoiceNumber ?? '—'}</span></strong></span><button type="button" class="plain-button" data-edit-number>${issued ? 'Régler le prochain n°' : 'Modifier le n°'}</button></div>${numberEditing ? `<div class="next-number-form" id="next-number-form"><label for="next-number">${issued ? 'Numéro pour la prochaine facture' : 'Numéro de cette facture'}</label><div class="number-entry"><input id="next-number" name="number" type="number" min="1" step="1" value="${esc(numberConfirm ?? (issued ? nextInvoiceNumber : state.invoiceNumber) ?? '')}" required aria-describedby="next-number-help" ${numberConfirm === null ? '' : 'readonly'}>${numberConfirm === null ? '<button type="button" class="plain-button number-step" data-number-step="-1" aria-label="Diminuer le numéro de facture">−</button><button type="button" class="plain-button number-step" data-number-step="1" aria-label="Augmenter le numéro de facture">+</button><button type="button" class="primary" data-stage-number>Appliquer</button>' : ''}<button type="button" class="plain-button" data-close-number>Fermer</button></div><small id="next-number-help">Un ancien numéro peut être réutilisé après confirmation. Les anciens PDF restent intacts.</small>${numberError ? `<p class="number-error" role="alert">${esc(numberError)}</p>` : ''}${numberConfirm === null ? '' : `<div class="number-confirm" role="group" aria-label="Confirmer le numéro de facture">${warning ? `<p class="number-warning" role="alert">${esc(warning)}</p>` : `<strong>Définir ${numberConfirm} comme prochain numéro ?</strong>`}<div><button type="button" class="primary" data-apply-number>${used || older ? 'Confirmer la réutilisation' : 'Confirmer'}</button><button type="button" class="plain-button" data-cancel-number>Annuler</button></div></div>`}</div>` : ''}</div>`;
     }
     function languageControls() {
       const copy = state.englishCopy;
@@ -407,8 +417,8 @@
         <div class="choice-row"><button type="button" class="choice ${state.kind === 'soumission' ? 'active' : ''}" data-kind="soumission" aria-pressed="${state.kind === 'soumission'}"><span class="choice-icon">S</span><span><strong>Soumission</strong><small>Préparer un prix pour un client</small></span></button><button type="button" class="choice ${state.kind === 'facture' ? 'active' : ''}" data-kind="facture" aria-pressed="${state.kind === 'facture'}"><span class="choice-icon">F</span><span><strong>Facture</strong><small>Facturer un travail ou un produit</small></span></button></div>
         <div class="workbench">
         <section class="editor">
-          <div class="section-head"><div class="section-title"><h3>${kindTitle()} à remplir</h3><p>Enregistrement automatique sur cet ordinateur.</p></div><div class="section-tools"><button type="button" class="plain-button save-button" data-save aria-label="Enregistrer le brouillon" title="Enregistrer le brouillon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v7h9V3M7 21v-8h10v8"></path></svg><span>Enregistrer le brouillon</span></button><button type="button" class="icon-button" data-voice aria-label="Remplir en parlant" title="Remplir en parlant"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8"></path></svg></button><button type="button" class="icon-button" data-undo aria-label="Annuler la dernière modification" title="Annuler la dernière modification" ${undoStack.length ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h9a7 7 0 0 1 0 14"></path></svg></button><button type="button" class="icon-button reset-button" data-reset aria-label="Réinitialiser le brouillon" title="Réinitialiser le brouillon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7"></path></svg></button></div></div>
-          <p class="save-status" id="save-status" role="status" aria-live="polite">${esc(saveStatus)}</p><div class="validation-panel" id="pdf-validation" role="alert" hidden></div>
+          <div class="section-head"><div class="section-title"><h3>${kindTitle()} à remplir</h3></div><div class="section-tools"><span class="save-indicator" id="save-status" role="status" aria-live="polite" aria-label="${esc(saveStatus)}" title="${saveStatus === 'Brouillon enregistré' ? 'Brouillon enregistré automatiquement sur cet ordinateur.' : esc(saveStatus)}" data-state="${saveStatus.includes('Échec') ? 'error' : saveStatus === 'Brouillon enregistré' ? 'saved' : 'pending'}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 2.5 2.5L16 9"></path></svg><span class="sr-only">${esc(saveStatus)}</span></span><button type="button" class="plain-button save-button" data-save aria-label="Enregistrer le brouillon" title="Enregistrer le brouillon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v7h9V3M7 21v-8h10v8"></path></svg><span>Enregistrer le brouillon</span></button><button type="button" class="icon-button" data-voice aria-label="Remplir en parlant" title="Remplir en parlant"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8"></path></svg></button><button type="button" class="icon-button" data-undo aria-label="Annuler la dernière modification" title="Annuler la dernière modification" ${undoStack.length ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h9a7 7 0 0 1 0 14"></path></svg></button><button type="button" class="icon-button reset-button" data-reset aria-label="Réinitialiser le brouillon" title="Réinitialiser le brouillon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7"></path></svg></button></div></div>
+          <div class="validation-panel" id="pdf-validation" role="alert" hidden></div>
           <div class="client-fields"><h4>Projet et client</h4><div class="client-grid">
             ${input('project','Nom du projet','Nom du projet','text','span2')}
             ${input('date','Date du document','','date')}
@@ -430,7 +440,7 @@
           </div>
           <div class="summary-section">
             ${invoiceNumberControl()}
-            ${languageControls()}
+            <div class="language-panel">${languageControls()}</div>
           </div>
           <div class="actions"><button type="button" class="primary" data-pdf>Créer le PDF</button><button type="button" class="print-button" data-print>Imprimer</button></div><p class="output-status" role="status" aria-live="polite">${esc(outputStatus)}</p>
         </section><aside class="preview">${preview()}</aside></div>${recentDialog()}${updateDialog()}${folderDialog()}${aiSettingsDialog()}`;
@@ -1105,7 +1115,7 @@
       if (b.hasAttribute('data-stage-number')) {
         const number = Number(document.getElementById('next-number')?.value);
         if (!Number.isSafeInteger(number) || number <= 0) { numberError = 'Entrez un numéro entier positif.'; render(); document.getElementById('next-number')?.focus(); return; }
-        if (number === nextInvoiceNumber) { numberError = 'Ce numéro est déjà le prochain numéro.'; render(); document.getElementById('next-number')?.focus(); return; }
+        if (number === nextInvoiceNumber && (state.issuedNumber || state.invoiceNumber === nextInvoiceNumber)) { numberError = 'Ce numéro est déjà le prochain numéro.'; render(); document.getElementById('next-number')?.focus(); return; }
         numberError = '';
         numberConfirm = number;
         render(); document.querySelector('[data-apply-number]')?.focus();
@@ -1116,10 +1126,12 @@
         if (numberConfirm === null || !await flushChanges()) return;
         setBusy(true);
         try {
-          const snapshot = await runCommand('set_next_invoice_number', { number: numberConfirm });
+          const selectedNumber = numberConfirm;
+          const reused = selectedNumber < nextInvoiceNumber || records.some(record => record.draft.issuedNumber === selectedNumber);
+          const snapshot = await runCommand('set_next_invoice_number', { number: selectedNumber, allowReuse: reused });
           applySnapshot(snapshot); numberConfirm = null; numberEditing = false; numberError = ''; render();
           document.querySelector('[data-edit-number]')?.focus();
-          notice(`Prochain numéro de facture : ${nextInvoiceNumber}.`);
+          notice(reused ? `Facture n° ${selectedNumber} prête. Prochain numéro automatique : ${nextInvoiceNumber}.` : `Prochain numéro de facture : ${nextInvoiceNumber}.`);
         } catch (error) { numberError = `Numéro inchangé : ${errorText(error)}`; numberConfirm = null; render(); document.getElementById('next-number')?.focus(); }
         finally { setBusy(false); }
         return;

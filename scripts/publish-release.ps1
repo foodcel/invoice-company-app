@@ -33,6 +33,8 @@ $notes = if ($version -eq '0.1.0') {
     'English customer copies with review and separate PDFs; OpenAI or Z.ai settings; work-line dictation and AI wording proposals; document dictation that fills fields during recording. A general API key, internet connection, and microphone permission are required for AI features. Please review AI-filled text and numbers before sending documents.'
 } elseif ($version -eq '0.1.6') {
     'Nemotron 3.5 French-capable speech recognition now runs locally in the Windows app. Dictation shows words while speaking and sends completed utterances to the selected OpenAI or Z.ai text service for field filling and description proposals. The installer bundles the CPU speech model and runtime; no separate setup is needed. A general API key and internet connection are still required for AI field filling, rewriting, and English translation. Review all AI-filled fields before creating a customer PDF.'
+} elseif ($version -eq '0.1.8') {
+    'Invoice numbers can now be deliberately reused after a warning. Existing invoices and PDFs stay intact, and the automatic sequence continues forward. The editor has a compact save-status icon, matched work-line controls and read-only amount box, cleaner invoice preview, side-by-side number and translation controls, and inner focus highlights. Local Nemotron dictation and OpenAI or Z.ai AI features remain available.'
 } else { "Windows release $tag. Signed update package for existing installations." }
 $body = @{ tag_name = $tag; target_commitish = 'main'; name = "Soumissions et factures $tag"; body = $notes; draft = $true; prerelease = $false } | ConvertTo-Json -Compress
 $release = Invoke-RestMethod -Method Post -Uri "$api/releases" -Headers $headers -ContentType 'application/json' -Body $body

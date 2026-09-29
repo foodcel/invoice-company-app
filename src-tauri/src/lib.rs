@@ -69,6 +69,8 @@ pub struct Draft {
     #[serde(default)]
     pub invoice_number: Option<u64>,
     #[serde(default)]
+    pub manual_invoice_number: Option<u64>,
+    #[serde(default)]
     pub issued_number: Option<u64>,
 }
 
@@ -180,6 +182,7 @@ fn blank_draft(kind: Kind) -> Draft {
         }],
         english_copy: None,
         invoice_number: (kind == Kind::Facture).then_some(FIRST_INVOICE_NUMBER),
+        manual_invoice_number: None,
         issued_number: None,
     }
 }
@@ -216,7 +219,7 @@ impl Store {
         for record in &mut self.records {
             let draft = &mut record.draft;
             draft.invoice_number = if draft.kind == Kind::Facture {
-                Some(draft.issued_number.unwrap_or(self.next_invoice_number))
+                Some(draft.issued_number.or(draft.manual_invoice_number).unwrap_or(self.next_invoice_number))
             } else {
                 None
             };
@@ -396,9 +399,12 @@ impl Repository {
         if current.issued_number.is_some() {
             previous.kind = Kind::Facture;
         }
-        previous.invoice_number = current
-            .issued_number
-            .or((previous.kind == Kind::Facture).then_some(store.next_invoice_number));
+        if current.issued_number.is_some() {
+            previous.manual_invoice_number = current.manual_invoice_number;
+        }
+        previous.invoice_number = if previous.kind == Kind::Facture {
+            current.issued_number.or(previous.manual_invoice_number).or(Some(store.next_invoice_number))
+        } else { None };
         validate_draft(&previous)?;
         store.records[index].draft = previous;
         store.records[index].updated_at = Utc::now().to_rfc3339();
@@ -411,7 +417,7 @@ impl Repository {
         store.response(&self.output_dir())
     }
 
-    fn set_next_invoice_number(&self, number: u64) -> AppResult<StateResponse> {
+    fn set_next_invoice_number(&self, number: u64, allow_reuse: bool) -> AppResult<StateResponse> {
         let mut store = self.load()?;
         self.reconcile_pending(&mut store)?;
         if number == 0 {
@@ -423,15 +429,6 @@ impl Repository {
                     .into(),
             );
         }
-        let highest = store
-            .records
-            .iter()
-            .filter_map(|record| record.draft.issued_number)
-            .max()
-            .unwrap_or(0);
-        if number <= highest {
-            return Err(format!("Le numéro {number} est déjà utilisé ou antérieur à la dernière facture émise ({highest})."));
-        }
         if number == u64::MAX {
             return Err("Numéro trop grand pour permettre la facture suivante.".into());
         }
@@ -440,7 +437,39 @@ impl Repository {
                 "Numéro trop grand pour être affiché sans erreur dans l'application.".into(),
             );
         }
-        store.next_invoice_number = number;
+        if number < store.next_invoice_number {
+            if !allow_reuse {
+                return Err(format!("Le numéro {number} précède le prochain numéro automatique ({}). Confirmez son utilisation dans l'application.", store.next_invoice_number));
+            }
+            let index = store.index(&store.current_id)?;
+            if store.records[index].draft.kind != Kind::Facture {
+                return Err("Ouvrez une facture pour lui attribuer cet ancien numéro.".into());
+            }
+            if store.records[index].draft.issued_number.is_some() {
+                if store.records.len() >= MAX_RECORDS {
+                    return Err("Trop de documents enregistrés pour créer une nouvelle facture.".into());
+                }
+                let mut draft = blank_draft(Kind::Facture);
+                draft.manual_invoice_number = Some(number);
+                draft.invoice_number = Some(number);
+                store.current_id = draft.id.clone();
+                store.records.push(Record {
+                    id: draft.id.clone(),
+                    draft,
+                    updated_at: Utc::now().to_rfc3339(),
+                    exports: vec![],
+                });
+            } else {
+                store.records[index].draft.manual_invoice_number = Some(number);
+                store.records[index].updated_at = Utc::now().to_rfc3339();
+            }
+        } else {
+            store.next_invoice_number = number;
+            let index = store.index(&store.current_id)?;
+            if store.records[index].draft.issued_number.is_none() {
+                store.records[index].draft.manual_invoice_number = None;
+            }
+        }
         self.commit(&mut store)?;
         store.response(&self.output_dir())
     }
@@ -491,7 +520,7 @@ impl Repository {
             return Err("Une facture déjà émise ne peut pas devenir une soumission.".into());
         }
         let number = if draft.kind == Kind::Facture {
-            Some(issued.unwrap_or(store.next_invoice_number))
+            Some(issued.or(store.records[index].draft.manual_invoice_number).unwrap_or(store.next_invoice_number))
         } else {
             None
         };
@@ -535,6 +564,7 @@ impl Repository {
                 store.records[index]
                     .draft
                     .issued_number
+                    .or(store.records[index].draft.manual_invoice_number)
                     .unwrap_or(store.next_invoice_number),
             )
         } else {
@@ -551,8 +581,7 @@ impl Repository {
         let index = store.index(&store.current_id)?;
         let snapshot = store.records[index].draft.clone();
         let number = snapshot
-            .issued_number
-            .or((snapshot.kind == Kind::Facture).then_some(store.next_invoice_number));
+            .invoice_number;
         let base_name = base_filename(&snapshot, number, &language)?;
         let filename = available_filename(&output_dir, &base_name)?;
         store.pending_export = Some(PendingExport {
@@ -635,13 +664,13 @@ impl Repository {
                     return Err("Conflit de numéro sur la facture déjà émise.".into());
                 }
             } else {
-                if number != store.next_invoice_number {
-                    return Err("Le prochain numéro a changé pendant l'export.".into());
+                if number != store.records[index].draft.manual_invoice_number.unwrap_or(store.next_invoice_number) {
+                    return Err("Le numéro de cette facture a changé pendant l'export.".into());
                 }
                 store.records[index].draft.issued_number = Some(number);
-                store.next_invoice_number = number
+                store.next_invoice_number = store.next_invoice_number.max(number
                     .checked_add(1)
-                    .ok_or("Plus de numéro de facture disponible.")?;
+                    .ok_or("Plus de numéro de facture disponible.")?);
             }
             store.records[index].draft.invoice_number = Some(number);
         }
@@ -665,18 +694,19 @@ impl Repository {
 }
 
 fn update_draft(store: &mut Store, mut incoming: Draft) -> AppResult<()> {
-    validate_draft(&incoming)?;
     let index = store.index(&incoming.id)?;
     let old = store.records[index].draft.clone();
     if old.issued_number.is_some() && incoming.kind != Kind::Facture {
         return Err("Une facture émise doit rester une facture.".into());
     }
     incoming.issued_number = old.issued_number;
+    incoming.manual_invoice_number = if incoming.kind == Kind::Facture { old.manual_invoice_number } else { None };
     incoming.invoice_number = if incoming.kind == Kind::Facture {
-        Some(old.issued_number.unwrap_or(store.next_invoice_number))
+        Some(old.issued_number.or(old.manual_invoice_number).unwrap_or(store.next_invoice_number))
     } else {
         None
     };
+    validate_draft(&incoming)?;
     if incoming != old {
         push_version(store.versions.entry(incoming.id.clone()).or_default(), old);
         store.records[index].draft = incoming;
@@ -703,6 +733,12 @@ fn valid_date(value: &str) -> bool {
 
 fn validate_draft(draft: &Draft) -> AppResult<()> {
     Uuid::parse_str(&draft.id).map_err(|_| "Identifiant de document invalide.".to_string())?;
+    if draft.manual_invoice_number.is_some_and(|n| n == 0 || n > MAX_INVOICE_NUMBER)
+        || (draft.kind == Kind::Soumission && draft.manual_invoice_number.is_some())
+        || (draft.issued_number.is_some() && draft.manual_invoice_number.is_some() && draft.manual_invoice_number != draft.issued_number)
+    {
+        return Err("Numéro manuel de facture invalide.".into());
+    }
     for (label, value, limit) in [
         ("client", &draft.client, 500),
         ("adresse", &draft.address, 2000),
@@ -921,7 +957,7 @@ fn validate_store(store: &Store) -> AppResult<()> {
         }
     }
     let mut ids = HashSet::new();
-    let mut issued = HashSet::new();
+    let mut issued: HashMap<u64, (usize, usize)> = HashMap::new();
     for record in &store.records {
         validate_draft(&record.draft)?;
         if record.id != record.draft.id || !ids.insert(record.id.clone()) {
@@ -929,18 +965,20 @@ fn validate_store(store: &Store) -> AppResult<()> {
         }
         if let Some(number) = record.draft.issued_number {
             if record.draft.kind != Kind::Facture
-                || !issued.insert(number)
                 || record.draft.invoice_number != Some(number)
             {
                 return Err("Numéros de facture émis incohérents.".into());
             }
+            let count = issued.entry(number).or_insert((0, 0));
+            count.0 += 1;
+            if record.draft.manual_invoice_number == Some(number) { count.1 += 1; }
         } else if record.draft.invoice_number
-            != (record.draft.kind == Kind::Facture).then_some(store.next_invoice_number)
+            != (record.draft.kind == Kind::Facture).then_some(record.draft.manual_invoice_number.unwrap_or(store.next_invoice_number))
         {
             return Err("Numéro proposé incohérent.".into());
         }
     }
-    if !ids.contains(&store.current_id) || issued.iter().any(|n| *n >= store.next_invoice_number) {
+    if !ids.contains(&store.current_id) || issued.iter().any(|(n, (total, manual))| *n >= store.next_invoice_number || *manual < total.saturating_sub(1)) {
         return Err("Document courant ou prochain numéro invalide.".into());
     }
     if store.versions.iter().any(|(id, list)| {
@@ -972,6 +1010,7 @@ fn validate_store(store: &Store) -> AppResult<()> {
                 record
                     .draft
                     .issued_number
+                    .or(record.draft.manual_invoice_number)
                     .unwrap_or(store.next_invoice_number),
             )
         } else {
@@ -1160,8 +1199,9 @@ fn set_next_invoice_number(
     app: tauri::AppHandle,
     lock: tauri::State<'_, Mutex<()>>,
     number: u64,
+    allow_reuse: bool,
 ) -> AppResult<StateResponse> {
-    with_repo(app, lock, |repo| repo.set_next_invoice_number(number))
+    with_repo(app, lock, |repo| repo.set_next_invoice_number(number, allow_reuse))
 }
 
 #[tauri::command]
@@ -1443,23 +1483,23 @@ mod tests {
     }
 
     #[test]
-    fn next_number_setting_cannot_reuse_or_go_below_issued_number() {
+    fn older_number_requires_confirmation_and_preserves_automatic_sequence() {
         let (_temp, repo) = setup();
-        assert!(repo.set_next_invoice_number(0).is_err());
+        assert!(repo.set_next_invoice_number(0, false).is_err());
         assert_eq!(
-            repo.set_next_invoice_number(3000)
+            repo.set_next_invoice_number(3000, false)
                 .unwrap()
                 .next_invoice_number,
             3000
         );
         let draft = ready_invoice(&repo);
         assert_eq!(draft.invoice_number, Some(3000));
-        repo.export_pdf(draft, PDF.to_vec(), Some(3000), "fr".into())
+        let original = repo.export_pdf(draft, PDF.to_vec(), Some(3000), "fr".into())
             .unwrap();
-        assert!(repo.set_next_invoice_number(3000).is_err());
-        assert!(repo.set_next_invoice_number(2999).is_err());
+        assert!(repo.set_next_invoice_number(3000, false).is_err());
+        assert!(repo.set_next_invoice_number(2999, false).is_err());
         assert_eq!(
-            repo.set_next_invoice_number(4000)
+            repo.set_next_invoice_number(4000, false)
                 .unwrap()
                 .next_invoice_number,
             4000
@@ -1472,6 +1512,39 @@ mod tests {
                 .invoice_number,
             Some(4000)
         );
+        let selected = repo.set_next_invoice_number(3000, true).unwrap();
+        assert_eq!(selected.current.invoice_number, Some(3000));
+        assert_eq!(selected.current.manual_invoice_number, Some(3000));
+        assert_eq!(selected.next_invoice_number, 4000);
+        let mut corrected = selected.current;
+        corrected.client = "Peter".into();
+        corrected.address = "68 chemin des guides".into();
+        corrected.items[0].description = "Correction".into();
+        corrected.items[0].price = "100".into();
+        repo.save_draft(corrected.clone()).unwrap();
+        assert_eq!(repo.load_state().unwrap().current.invoice_number, Some(3000));
+        let exported = repo.export_pdf(corrected, PDF.to_vec(), Some(3000), "fr".into()).unwrap();
+        assert!(exported.name_collision);
+        assert_ne!(original.path, exported.path);
+        assert!(Path::new(&original.path).exists());
+        assert!(Path::new(&exported.path).exists());
+        assert_eq!(exported.invoice_number, Some(3000));
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 4000);
+        assert_eq!(repo.new_draft(Kind::Facture).unwrap().current.invoice_number, Some(4000));
+        let unused = repo.set_next_invoice_number(2999, true).unwrap();
+        assert_eq!(unused.current.invoice_number, Some(2999));
+        assert_eq!(unused.next_invoice_number, 4000);
+        let gap = repo.set_next_invoice_number(3500, true).unwrap();
+        assert_eq!(gap.current.invoice_number, Some(3500));
+        assert_eq!(gap.next_invoice_number, 4000);
+        let mut quote = gap.current;
+        quote.kind = Kind::Soumission;
+        let quote = repo.save_draft(quote).unwrap().current;
+        assert_eq!(quote.manual_invoice_number, None);
+        assert_eq!(quote.invoice_number, None);
+        let mut invoice_again = quote;
+        invoice_again.kind = Kind::Facture;
+        assert_eq!(repo.save_draft(invoice_again).unwrap().current.invoice_number, Some(4000));
     }
 
     #[test]

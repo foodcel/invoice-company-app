@@ -1,6 +1,6 @@
 # Tauri 2 Windows delivery for Dad's PC
 
-**Status (2026-09-28):** The Tauri 2 app and a per-user NSIS installer have been built on the development PC. The installed app opened, saved drafts, exported Letter PDFs, and retained invoice 2060 after restart. The updater is configured with the public key and intended `foodcel/invoice-company-app` feed. The GitHub repository/feed and a live two-version update remain unverified because GitHub rejected repository creation. Dad's PC has not been tested.
+**Status (2026-09-28):** The Tauri 2 app and a per-user NSIS installer have been built and installed on the development PC. Existing drafts survived an installer update. The public `foodcel/invoice-company-app` repository and signed release feed are configured. A live update from an older installed version and installation on Dad's PC still need direct testing.
 
 ## Prerequisites and first package
 
@@ -23,5 +23,5 @@
 
 1. Inspect Dad's PC for Windows version/architecture, WebView2, connectivity, and admin rights. Keep NSIS `currentUser` plus online WebView2 bootstrapper as the initial choice if those checks pass; select the offline runtime if installation must work disconnected.
 2. Back up the updater private key securely outside the public repository. A release build uses this key; the app checks for updates only on the user's action.
-3. Create the public GitHub repository and publish the signed installer, matching `.sig`, and generated `latest.json` under a `v<version>` release. Run a two-version update test against the live feed before treating updates as verified.
+3. Run a two-version update test through the published GitHub feed before treating in-app updates as verified on Dad's PC.
 4. Decide whether to acquire Windows code signing before distribution to Dad and run the clean-machine install proof.
