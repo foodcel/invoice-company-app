@@ -63,12 +63,13 @@
     let numberEditing = false;
     let numberError = '';
     let saveStatus = 'Brouillon enregistré';
+    let lastSavedAt = null;
     let outputStatus = '';
     const copy = value => JSON.parse(JSON.stringify(value));
     const errorText = error => String(error?.message || error || 'Erreur inconnue');
     function applySnapshot(snapshot, replaceCurrent = true) {
       if (!snapshot?.current || !Array.isArray(snapshot.records)) throw new Error('Réponse de stockage invalide.');
-      if (state?.id !== snapshot.current.id) { englishMode = false; translationError = ''; }
+      if (state?.id !== snapshot.current.id) { englishMode = false; translationError = ''; lastSavedAt = null; }
       records = snapshot.records;
       nextInvoiceNumber = snapshot.nextInvoiceNumber;
       pdfDirectory = snapshot.pdfDirectory;
@@ -99,11 +100,20 @@
       saveStatus = message;
       const el = document.getElementById('save-status');
       if (el) {
-        el.querySelector('.sr-only').textContent = message;
-        el.setAttribute('aria-label', message);
-        el.title = message === 'Brouillon enregistré' ? 'Brouillon enregistré automatiquement sur cet ordinateur.' : message;
-        el.dataset.state = message.includes('Échec') ? 'error' : message === 'Brouillon enregistré' ? 'saved' : 'pending';
+        el.querySelector('.save-status-announcement').textContent = message;
+        el.setAttribute('aria-label', `Enregistrer le brouillon. ${message}`);
+        el.title = saveTooltip();
+        el.dataset.state = saveState();
       }
+    }
+    function saveState() {
+      if (saveStatus.includes('Échec')) return 'error';
+      if (saveStatus === 'Enregistrement…') return 'saving';
+      return saveStatus === 'Brouillon enregistré' ? 'saved' : 'pending';
+    }
+    function saveTooltip() {
+      const time = lastSavedAt ? ` Dernier enregistrement confirmé à ${lastSavedAt.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}.` : '';
+      return `Enregistrer le brouillon. Enregistrement automatique sur cet ordinateur 0,5 s après la dernière modification. État : ${saveStatus}${time}`;
     }
     async function saveNow(force = false) {
       clearTimeout(saveTimer);
@@ -118,6 +128,7 @@
         const beforeIssued = state?.issuedNumber;
         applySnapshot(snapshot, state?.id === id && editRevision === revision);
         savedRevision = revision;
+        lastSavedAt = new Date();
         if (editRevision > revision) { setSaveStatus('Modifications en attente…'); clearTimeout(saveTimer); saveTimer = setTimeout(() => { void saveNow(); }, 500); }
         else setSaveStatus('Brouillon enregistré');
         if (state?.id === id && (beforeNumber !== state.invoiceNumber || beforeIssued !== state.issuedNumber)) render();
@@ -417,7 +428,7 @@
         <div class="choice-row"><button type="button" class="choice ${state.kind === 'soumission' ? 'active' : ''}" data-kind="soumission" aria-pressed="${state.kind === 'soumission'}"><span class="choice-icon">S</span><span><strong>Soumission</strong><small>Préparer un prix pour un client</small></span></button><button type="button" class="choice ${state.kind === 'facture' ? 'active' : ''}" data-kind="facture" aria-pressed="${state.kind === 'facture'}"><span class="choice-icon">F</span><span><strong>Facture</strong><small>Facturer un travail ou un produit</small></span></button></div>
         <div class="workbench">
         <section class="editor">
-          <div class="section-head"><div class="section-title"><h3>${kindTitle()} à remplir</h3></div><div class="section-tools"><span class="save-indicator" id="save-status" role="status" aria-live="polite" aria-label="${esc(saveStatus)}" title="${saveStatus === 'Brouillon enregistré' ? 'Brouillon enregistré automatiquement sur cet ordinateur.' : esc(saveStatus)}" data-state="${saveStatus.includes('Échec') ? 'error' : saveStatus === 'Brouillon enregistré' ? 'saved' : 'pending'}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 2.5 2.5L16 9"></path></svg><span class="sr-only">${esc(saveStatus)}</span></span><button type="button" class="plain-button save-button" data-save aria-label="Enregistrer le brouillon" title="Enregistrer le brouillon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v7h9V3M7 21v-8h10v8"></path></svg><span>Enregistrer le brouillon</span></button><button type="button" class="icon-button" data-voice aria-label="Remplir en parlant" title="Remplir en parlant"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8"></path></svg></button><button type="button" class="icon-button" data-undo aria-label="Annuler la dernière modification" title="Annuler la dernière modification" ${undoStack.length ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h9a7 7 0 0 1 0 14"></path></svg></button><button type="button" class="icon-button reset-button" data-reset aria-label="Réinitialiser le brouillon" title="Réinitialiser le brouillon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7"></path></svg></button></div></div>
+          <div class="section-head"><div class="section-title"><h3>${kindTitle()} à remplir</h3></div><div class="section-tools"><button type="button" class="plain-button save-button" id="save-status" data-save data-state="${saveState()}" aria-label="Enregistrer le brouillon. ${esc(saveStatus)}" title="${esc(saveTooltip())}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v7h9V3M7 21v-8h10v8"></path></svg><span class="save-button-label">Enregistrer le brouillon</span><span class="save-status-mark" aria-hidden="true"></span><span class="save-status-announcement sr-only" role="status" aria-live="polite">${esc(saveStatus)}</span></button><button type="button" class="icon-button" data-voice aria-label="Remplir en parlant" title="Remplir en parlant"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8"></path></svg></button><button type="button" class="icon-button" data-undo aria-label="Annuler la dernière modification" title="Annuler la dernière modification" ${undoStack.length ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h9a7 7 0 0 1 0 14"></path></svg></button><button type="button" class="icon-button reset-button" data-reset aria-label="Réinitialiser le brouillon" title="Réinitialiser le brouillon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7"></path></svg></button></div></div>
           <div class="validation-panel" id="pdf-validation" role="alert" hidden></div>
           <div class="client-fields"><h4>Projet et client</h4><div class="client-grid">
             ${input('project','Nom du projet','Nom du projet','text','span2')}

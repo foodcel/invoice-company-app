@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Choisir les panneaux compacts · Soumissions et factures</title>
+  <style>
+    :root { font-family: "Segoe UI", Aptos, Arial, sans-serif; color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f6f2eb; color: #23302c; }
+    main { max-width: 1140px; margin: auto; padding: 30px 22px 70px; }
+    h1 { margin: 0; font-size: clamp(25px, 4vw, 38px); letter-spacing: -.035em; }
+    h2 { margin: 43px 0 8px; font-size: 23px; letter-spacing: -.025em; }
+    p { line-height: 1.5; }
+    .intro { color: #64726d; max-width: 770px; margin: 9px 0 0; }
+    nav { display: flex; gap: 10px; margin-top: 20px; }
+    nav a { color: #226b5b; font-weight: 700; text-decoration: none; padding: 8px 12px; border: 1px solid #d9ded8; border-radius: 9px; background: white; }
+    .section-note { color: #64726d; margin: 0 0 18px; }
+    .options { display: grid; gap: 18px; }
+    .option { border: 1px solid #d9ded8; border-radius: 17px; padding: 18px; background: #fffdfa; box-shadow: 0 10px 26px #2a39320b; }
+    .option.recommended { border-color: #87b9a3; box-shadow: inset 0 0 0 1px #87b9a3, 0 10px 26px #2a39320b; }
+    .option-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; }
+    .option-head b { font-size: 16px; }
+    .tag { padding: 4px 8px; border-radius: 99px; background: #e9f3ec; color: #226b5b; font-size: 11px; font-weight: 750; }
+    .option-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    .sample-label { display: block; color: #64726d; font-size: 11px; font-weight: 750; margin: 0 0 7px; text-transform: uppercase; letter-spacing: .06em; }
+    .sample { display: flex; align-items: flex-start; min-height: 107px; }
+    .panel { width: min(100%, 320px); min-height: 68px; padding: 10px 12px; border-radius: 11px; border: 1px solid #d9ded8; background: #e9f3ec; }
+    .panel.white { background: #fffdfa; }
+    .panel h3 { font-size: 12px; font-weight: 700; margin: 0; }
+    .panel small { color: #64726d; font-size: 11px; }
+    .number { font-weight: 800; font-size: 21px; line-height: 1; }
+    .small-number { font-weight: 800; font-size: 16px; }
+    button, input { font: inherit; }
+    button { min-height: 34px; border: 1px solid #d9ded8; border-radius: 8px; background: white; color: #23302c; padding: 0 9px; font-size: 12px; font-weight: 700; }
+    button.primary { background: #287457; border-color: #287457; color: white; }
+    button.icon { width: 34px; padding: 0; font-size: 17px; }
+    input { width: 75px; min-width: 0; height: 34px; border: 1px solid #93ada2; border-radius: 8px; background: white; padding: 0 7px; font-size: 14px; }
+    .row { display: flex; align-items: center; gap: 7px; }
+    .between { justify-content: space-between; }
+    .wrap { flex-wrap: wrap; }
+    .stack { display: grid; gap: 7px; }
+    .push { margin-left: auto; }
+    .dim { color: #64726d; font-size: 11px; }
+    .divider { border-top: 1px solid #c9dacd; margin: 8px 0; }
+    .outline { border: 1px solid #a4bcb0; border-radius: 8px; background: #fffdfa; padding: 6px 8px; }
+    .chip { display: inline-flex; align-items: center; border-radius: 99px; padding: 5px 9px; background: #dcebe0; color: #245f4d; font-size: 11px; font-weight: 750; }
+    .warning { margin-top: 17px; padding: 9px 11px; border-radius: 9px; background: #fff2dd; border: 1px solid #eed2a3; color: #664419; font-size: 12px; }
+    .option-note { margin: 3px 0 0; font-size: 12px; color: #64726d; }
+    .seg { display: flex; gap: 0; }
+    .seg > * { border-radius: 0; }
+    .seg > :first-child { border-radius: 8px 0 0 8px; }
+    .seg > :last-child { border-radius: 0 8px 8px 0; margin-left: -1px; }
+    .seg .selected { background: #dcebe0; color: #226b5b; border-color: #87b9a3; }
+    @media (max-width: 700px) { .option-body { grid-template-columns: 1fr; gap: 12px; } .sample { min-height: auto; } .panel { width: 100%; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Deux petits panneaux, dix façons de les présenter</h1>
+  <p class="intro">Propositions visuelles pour choisir la prochaine version. Chaque exemple garde les deux panneaux côte à côte dans l’application. La colonne de droite montre l’état après modification ou traduction.</p>
+  <nav><a href="#numero">Numéro de facture · 5 options</a><a href="#anglais">Copie anglaise · 5 options</a></nav>
+
+  <h2 id="numero">Numéro de facture</h2>
+  <p class="section-note">Même règle pour les cinq&nbsp;: réutiliser un numéro exige un avertissement et une confirmation; aucun ancien PDF n’est remplacé.</p>
+  <div class="options">
+    <article class="option recommended"><div class="option-head"><b>N1 · Ligne simple</b><span class="tag">Recommandé</span></div><div class="option-body">
+      <div><span class="sample-label">Au repos</span><div class="sample"><div class="panel row between"><span><small>Facture n°</small><br><span class="number">2061</span></span><button>Modifier</button></div></div></div>
+      <div><span class="sample-label">Après Modifier</span><div class="sample"><div class="panel stack"><small>Numéro de cette facture</small><div class="row"><input aria-label="Numéro" value="2061"><button class="primary">✓</button><button class="icon" aria-label="Annuler">×</button></div></div></div></div>
+    </div><p class="option-note">Le numéro devient un champ dans la même carte; pas de nouvelle grande section.</p></article>
+
+    <article class="option"><div class="option-head"><b>N2 · Champ toujours visible</b></div><div class="option-body">
+      <div><span class="sample-label">Au repos</span><div class="sample"><div class="panel row between"><span><small>N° de facture</small><br><span class="small-number">2061</span></span><button class="icon" aria-label="Modifier">✎</button></div></div></div>
+      <div><span class="sample-label">Après Modifier</span><div class="sample"><div class="panel row wrap"><span class="dim">N°</span><input aria-label="Numéro" value="2061"><button class="icon" aria-label="Diminuer">−</button><button class="icon" aria-label="Augmenter">+</button><button class="primary">OK</button></div></div></div>
+    </div><p class="option-note">Garde les flèches manuelles et évite tout texte d’aide permanent.</p></article>
+
+    <article class="option"><div class="option-head"><b>N3 · Nombre cliquable</b></div><div class="option-body">
+      <div><span class="sample-label">Au repos</span><div class="sample"><div class="panel stack"><small>Numéro de facture</small><div class="row"><button class="outline number" title="Modifier le numéro">2061 ✎</button><span class="dim">Cliquez le nombre</span></div></div></div></div>
+      <div><span class="sample-label">Après clic</span><div class="sample"><div class="panel stack"><small>Numéro de facture</small><div class="row"><input aria-label="Numéro" value="2061"><button class="primary">Appliquer</button><button class="icon" aria-label="Annuler">×</button></div></div></div></div>
+    </div><p class="option-note">Le nombre lui-même est la commande; très court, mais un peu moins évident pour Dad.</p></article>
+
+    <article class="option"><div class="option-head"><b>N4 · Carte à deux niveaux</b></div><div class="option-body">
+      <div><span class="sample-label">Fermée</span><div class="sample"><div class="panel row between"><span class="small-number">Facture n° 2061</span><button class="icon" aria-label="Ouvrir">⌄</button></div></div></div>
+      <div><span class="sample-label">Ouverte</span><div class="sample"><div class="panel"><div class="row between"><strong>Facture n° 2061</strong><span class="dim">⌃</span></div><div class="divider"></div><div class="row"><input aria-label="Numéro" value="2061"><button class="primary">Confirmer</button><button class="icon" aria-label="Annuler">×</button></div></div></div></div>
+    </div><p class="option-note">Une petite ouverture à l’intérieur de la carte; la hauteur ne double pas.</p></article>
+
+    <article class="option"><div class="option-head"><b>N5 · Barre d’action</b></div><div class="option-body">
+      <div><span class="sample-label">Au repos</span><div class="sample"><div class="panel row"><span class="chip">N° 2061</span><button class="push">Changer le numéro</button></div></div></div>
+      <div><span class="sample-label">Après clic</span><div class="sample"><div class="panel row wrap"><span class="chip">N°</span><input aria-label="Numéro" value="2061"><button class="primary">Enregistrer</button><button class="icon" aria-label="Annuler">×</button></div></div></div>
+    </div><p class="option-note">Look de barre d’outils, peu de texte; moins cohérent avec le reste du formulaire.</p></article>
+  </div>
+  <div class="warning"><strong>Si le numéro existe déjà&nbsp;:</strong> une courte confirmation apparaît dans cette même carte&nbsp;: «&nbsp;2060 est déjà utilisé. Réutiliser ce numéro&nbsp;?&nbsp;» avec <b>Confirmer</b> et <b>Annuler</b>.</div>
+
+  <h2 id="anglais">Copie anglaise</h2>
+  <p class="section-note">La traduction reste une copie à relire. Le bouton de vérification peut ouvrir l’espace de relecture existant sans agrandir ce petit panneau.</p>
+  <div class="options">
+    <article class="option recommended"><div class="option-head"><b>E1 · Langue du PDF</b><span class="tag">Recommandé</span></div><div class="option-body">
+      <div><span class="sample-label">Français</span><div class="sample"><div class="panel white row between"><span><small>Langue du PDF</small><br><strong>Français</strong></span><button>Traduire en anglais</button></div></div></div>
+      <div><span class="sample-label">Copie créée</span><div class="sample"><div class="panel white row between"><span><small>Copie anglaise</small><br><strong>À vérifier</strong></span><button class="primary">Vérifier</button></div></div></div>
+    </div><p class="option-note">Une ligne lisible, sans phrase secondaire; le vrai travail de relecture s’ouvre au besoin.</p></article>
+
+    <article class="option"><div class="option-head"><b>E2 · Deux langues côte à côte</b></div><div class="option-body">
+      <div><span class="sample-label">Français</span><div class="sample"><div class="panel white stack"><small>Copie pour le client</small><div class="seg"><button class="selected">Français</button><button>English +</button></div></div></div></div>
+      <div><span class="sample-label">Copie créée</span><div class="sample"><div class="panel white row wrap"><div class="seg"><button>Français</button><button class="selected">English</button></div><button>Vérifier</button></div></div></div>
+    </div><p class="option-note">Visuel de sélection de langue, mais «&nbsp;English&nbsp;» doit lancer une vraie traduction.</p></article>
+
+    <article class="option"><div class="option-head"><b>E3 · Bouton de traduction</b></div><div class="option-body">
+      <div><span class="sample-label">Français</span><div class="sample"><div class="panel white row between"><span class="chip">FR</span><button>FR → EN</button></div></div></div>
+      <div><span class="sample-label">Copie créée</span><div class="sample"><div class="panel white row between"><span class="chip">EN · à relire</span><button>Ouvrir</button></div></div></div>
+    </div><p class="option-note">Le plus court; les abréviations sont moins claires pour quelqu’un qui utilise peu l’informatique.</p></article>
+
+    <article class="option"><div class="option-head"><b>E4 · Deux actions explicites</b></div><div class="option-body">
+      <div><span class="sample-label">Français</span><div class="sample"><div class="panel white row wrap"><button class="primary">Version française</button><button>Créer une copie anglaise</button></div></div></div>
+      <div><span class="sample-label">Copie créée</span><div class="sample"><div class="panel white row wrap"><button>Français</button><button class="primary">Anglais</button><button>Relire</button></div></div></div>
+    </div><p class="option-note">Très explicite, mais peut repasser sur deux lignes dans une fenêtre étroite.</p></article>
+
+    <article class="option"><div class="option-head"><b>E5 · Titre et lien d’action</b></div><div class="option-body">
+      <div><span class="sample-label">Français</span><div class="sample"><div class="panel white row between"><span><strong>Pour le client</strong><br><small>Français</small></span><button>+ Anglais</button></div></div></div>
+      <div><span class="sample-label">Copie créée</span><div class="sample"><div class="panel white row between"><span><strong>Pour le client</strong><br><small>Français + anglais</small></span><button>Relire l’anglais</button></div></div></div>
+    </div><p class="option-note">Présente la traduction comme une copie supplémentaire plutôt qu’un changement du document français.</p></article>
+  </div>
+</main>
+</body>
+</html>
