@@ -129,6 +129,9 @@
     .line-entry.line-recording textarea { border-color: var(--accent); box-shadow: 0 0 0 4px #42a87565, 0 0 18px #42a87544; animation: listening-glow 1.5s ease-in-out infinite alternate; }
     [data-voice].recording { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 4px #42a87545; animation: listening-glow 1.5s ease-in-out infinite alternate; }
     .voice-status { margin: 2px 0 14px; padding: 9px 12px; border-left: 3px solid var(--accent); border-radius: 4px; background: var(--soft); color: var(--ink); font-size: 12px; }
+    .voice-live { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--accent); border-radius: 10px; background: var(--surface); color: var(--ink); }
+    .voice-live strong { display: block; margin-bottom: 5px; font-size: 12px; }
+    .voice-live p { margin: 0; min-height: 1.5em; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
     .voice-recovery { display: grid; gap: 9px; margin: 2px 0 16px; padding: 12px; border: 1px solid var(--accent); border-radius: 10px; background: var(--surface); color: var(--ink); }
     .voice-recovery strong { font-size: 13px; }
     .voice-recovery p { margin: 0; color: var(--muted); font-size: 12px; }

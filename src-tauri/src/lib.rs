@@ -13,6 +13,7 @@ use tauri::Manager;
 use uuid::Uuid;
 
 mod ai;
+mod local_asr;
 
 type AppResult<T> = Result<T, String>;
 const FIRST_INVOICE_NUMBER: u64 = 2060;
@@ -1229,14 +1230,8 @@ async fn ai_translate_english(
 }
 
 #[tauri::command]
-async fn ai_transcribe_audio(
-    app: tauri::AppHandle,
-    lock: tauri::State<'_, Mutex<()>>,
-    audio_bytes: Vec<u8>,
-) -> AppResult<String> {
-    // Read the chosen provider before awaiting the network; do not hold the state lock.
-    let provider = with_repo(app, lock, |repo| Ok(repo.load()?.ai_provider))?;
-    ai::transcribe(&provider, audio_bytes).await
+fn start_local_asr(app: tauri::AppHandle, asr: tauri::State<'_, local_asr::LocalAsr>) -> AppResult<String> {
+    asr.start(&app)
 }
 
 #[tauri::command]
@@ -1281,6 +1276,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(Mutex::new(()))
+        .manage(local_asr::LocalAsr::default())
         .invoke_handler(tauri::generate_handler![
             load_state,
             save_draft,
@@ -1293,13 +1289,18 @@ pub fn run() {
             set_ai_provider,
             set_ai_key,
             ai_translate_english,
-            ai_transcribe_audio,
+            start_local_asr,
             ai_rewrite_line,
             ai_extract_document,
             export_pdf
         ])
-        .run(tauri::generate_context!())
-        .expect("Unable to start the local invoice app");
+        .build(tauri::generate_context!())
+        .expect("Unable to build the local invoice app")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                app.state::<local_asr::LocalAsr>().stop();
+            }
+        });
 }
 
 #[cfg(test)]

@@ -2,7 +2,6 @@
 //! Keys belong to the Windows user credential vault, never to application state.
 
 use chrono::NaiveDate;
-use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -292,7 +291,6 @@ fn validate_translation(
     Ok(())
 }
 
-const MAX_AUDIO_BYTES: usize = 25_000_000;
 const MAX_AI_RESPONSE_BYTES: u64 = 256_000;
 const MAX_TRANSCRIPT_BYTES: usize = 100_000;
 
@@ -443,107 +441,6 @@ fn valid_ai_text(value: &str, max_bytes: usize) -> bool {
         && !value
             .chars()
             .any(|ch| ch == '\0' || (ch.is_control() && ch != '\n' && ch != '\r' && ch != '\t'))
-}
-
-/// Transcribe one complete WAV clip with the selected provider's general key.
-pub async fn transcribe(provider: &str, audio: Vec<u8>) -> Result<String, String> {
-    let provider = Provider::parse(provider)?;
-    if audio.len() > MAX_AUDIO_BYTES {
-        return Err("L'enregistrement dépasse 25 Mo. Raccourcissez-le et réessayez.".into());
-    }
-    let duration = wav_duration_seconds(&audio)?;
-    if matches!(provider, Provider::Zai) && duration > 30.0 {
-        return Err("Z.ai accepte au plus 30 secondes par enregistrement.".into());
-    }
-    let key = general_key(provider)?;
-    let (url, model) = match provider {
-        Provider::OpenAi => (
-            "https://api.openai.com/v1/audio/transcriptions",
-            "gpt-transcribe",
-        ),
-        Provider::Zai => (
-            "https://api.z.ai/api/paas/v4/audio/transcriptions",
-            "glm-asr-2512",
-        ),
-    };
-    let part = Part::bytes(audio)
-        .file_name("dictation.wav")
-        .mime_str("audio/wav")
-        .map_err(|_| "Impossible de préparer l'enregistrement audio.".to_string())?;
-    let mut form = Form::new().text("model", model).part("file", part);
-    if matches!(provider, Provider::Zai) {
-        form = form.text("stream", "false");
-    }
-    let client = ai_client(120)?;
-    let payload = checked_json(provider, client.post(url).bearer_auth(key).multipart(form)).await?;
-    let text = payload
-        .get("text")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "Le service vocal n'a pas renvoyé de transcription.".to_string())?
-        .trim();
-    // A quiet segment is normal during an open microphone session.
-    if text.is_empty() {
-        return Ok(String::new());
-    }
-    if !valid_ai_text(text, MAX_TRANSCRIPT_BYTES) {
-        return Err("La transcription est vide, trop longue ou invalide.".into());
-    }
-    Ok(text.to_owned())
-}
-
-fn wav_duration_seconds(audio: &[u8]) -> Result<f64, String> {
-    let invalid = || "L'enregistrement doit être un fichier WAV valide.".to_string();
-    if audio.len() < 44 || &audio[..4] != b"RIFF" || &audio[8..12] != b"WAVE" {
-        return Err(invalid());
-    }
-    let mut offset = 12usize;
-    let mut byte_rate = None;
-    let mut data_bytes = 0usize;
-    while offset + 8 <= audio.len() {
-        let size = u32::from_le_bytes(
-            audio[offset + 4..offset + 8]
-                .try_into()
-                .map_err(|_| invalid())?,
-        ) as usize;
-        let start = offset + 8;
-        let end = start
-            .checked_add(size)
-            .filter(|end| *end <= audio.len())
-            .ok_or_else(invalid)?;
-        match &audio[offset..offset + 4] {
-            b"fmt " if size >= 16 => {
-                let channels = u16::from_le_bytes(
-                    audio[start + 2..start + 4]
-                        .try_into()
-                        .map_err(|_| invalid())?,
-                );
-                let sample_rate = u32::from_le_bytes(
-                    audio[start + 4..start + 8]
-                        .try_into()
-                        .map_err(|_| invalid())?,
-                );
-                let rate = u32::from_le_bytes(
-                    audio[start + 8..start + 12]
-                        .try_into()
-                        .map_err(|_| invalid())?,
-                );
-                if channels == 0 || sample_rate == 0 || rate == 0 {
-                    return Err(invalid());
-                }
-                byte_rate = Some(rate);
-            }
-            b"data" => data_bytes = data_bytes.saturating_add(size),
-            _ => {}
-        }
-        offset = end
-            .checked_add(size & 1)
-            .filter(|next| *next <= audio.len())
-            .ok_or_else(invalid)?;
-    }
-    if data_bytes == 0 {
-        return Err(invalid());
-    }
-    Ok(data_bytes as f64 / byte_rate.ok_or_else(invalid)? as f64)
 }
 
 /// Rewrite one line for human review. `variation` asks for alternate wording only.

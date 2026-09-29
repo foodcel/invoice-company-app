@@ -208,3 +208,102 @@ export async function startCapture({ segmentMs, onSegment, onError } = {}) {
     throw error;
   }
 }
+
+/** Local Nemotron realtime session. Audio leaves the WebView only for the authenticated loopback service. */
+export async function startStreamingRecognition({ url, onPartial, onFinal, onError }) {
+  if (!url?.startsWith('ws://127.0.0.1:')) throw new Error('Adresse du moteur vocal local invalide.');
+  let socket;
+  let lastFailure;
+  for (let attempt = 0; attempt < 120; attempt++) {
+    try {
+      socket = await new Promise((resolve, reject) => {
+        const candidate = new WebSocket(url);
+        candidate.binaryType = 'arraybuffer';
+        candidate.onopen = () => resolve(candidate);
+        candidate.onerror = () => { candidate.close(); reject(new Error('Le moteur vocal démarre…')); };
+      });
+      break;
+    } catch (error) {
+      lastFailure = error;
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  if (!socket) throw lastFailure || new Error('Le moteur vocal local ne répond pas.');
+
+  let closed = false;
+  let partial = '';
+  let committed = false;
+  let cancelled = false;
+  let finishResolve;
+  let finishReject;
+  const finished = new Promise((resolve, reject) => { finishResolve = resolve; finishReject = reject; });
+  socket.onmessage = event => {
+    if (cancelled) return;
+    let message;
+    try { message = JSON.parse(event.data); } catch { return; }
+    if (message.type === 'error') {
+      const error = new Error(message.error?.message || message.message || 'Erreur du moteur vocal.');
+      finishReject(error); onError(error); return;
+    }
+    if (message.type === 'conversation.item.input_audio_transcription.delta') {
+      const delta = String(message.delta ?? message.text ?? '');
+      partial += delta;
+      try { onPartial(partial); } catch (error) { onError(error); }
+    }
+    if (message.type === 'conversation.item.input_audio_transcription.completed') {
+      const text = String(message.transcript ?? message.text ?? partial).trim();
+      partial = '';
+      try { onPartial(''); if (text) onFinal(text); }
+      catch (error) { onError(error); }
+    }
+    if (message.type === 'input_audio_buffer.committed' && closed) {
+      committed = true;
+      finishResolve();
+    }
+  };
+  socket.onerror = () => {
+    if (cancelled) return;
+    const error = new Error('La connexion au moteur vocal a été interrompue.');
+    finishReject(error); onError(error);
+  };
+  socket.onclose = () => {
+    if (committed || cancelled) finishResolve();
+    else {
+      const error = new Error('Le moteur vocal s’est arrêté avant la fin de la dictée.');
+      finishReject(error);
+      if (!closed) onError(error);
+    }
+  };
+  socket.send(JSON.stringify({ type: 'session.update', session: {
+    sample_rate: 16000, language: 'fr-CA', automatic_punctuation: true,
+    endpointing_ms: 800
+  } }));
+
+  let capture;
+  try {
+    capture = await startCapture({ segmentMs: 120,
+      onSegment: async blob => {
+        if (socket.readyState !== WebSocket.OPEN) throw new Error('Connexion vocale fermée.');
+        const wav = await blob.arrayBuffer();
+        socket.send(wav.slice(44)); // PCM16 mono, little-endian, 16 kHz
+      },
+      onError: error => { cancelled = true; finishResolve(); socket.close(); onError(error); }
+    });
+  } catch (error) { cancelled = true; finishResolve(); socket.close(); throw error; }
+  return {
+    async stop() {
+      await capture.stop();
+      closed = true;
+      socket.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+      let timer;
+      const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('La dernière phrase n’a pas pu être confirmée.')), 20000); });
+      try { await Promise.race([finished, timeout]); }
+      finally { clearTimeout(timer); socket.close(); }
+    },
+    async cancel() {
+      closed = true; cancelled = true; finishResolve();
+      await capture.cancel();
+      socket.close();
+    }
+  };
+}

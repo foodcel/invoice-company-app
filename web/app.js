@@ -3,7 +3,7 @@
     import { relaunch } from '@tauri-apps/plugin-process';
     import { open as pickFolder } from '@tauri-apps/plugin-dialog';
     import { createPdf } from './pdf.js';
-    import { startCapture } from './voice-capture.js';
+    import { startStreamingRecognition } from './voice-capture.js';
     import { createVoiceSession, releaseVoiceField, releaseVoiceItem, applyVoiceUpdate } from './voice-workflow.js';
     import businessCardImage from './assets/business-card-image.png';
 
@@ -47,6 +47,7 @@
     let voiceRetryBusy = false;
     let voiceQueue = Promise.resolve();
     let voiceStatus = '';
+    let voiceLiveText = '';
     let loadError = null;
     let recentOpener = null;
     let updateOpen = false;
@@ -319,7 +320,7 @@
       const statusAnchor = document.getElementById('save-status');
       if (statusAnchor) {
         const recovery = voiceRecovery?.session?.transcript;
-        statusAnchor.insertAdjacentHTML('afterend', `${voiceStatus ? `<p class="voice-status" role="status" aria-live="polite">${esc(voiceStatus)}</p>` : ''}${recovery ? `<div class="voice-recovery" role="alert"><strong>Paroles reconnues à vérifier</strong><p>L’analyse a échoué. Votre texte reconnu reste disponible ici.</p><textarea readonly rows="3" aria-label="Paroles reconnues">${esc(recovery)}</textarea><div><button type="button" class="plain-button" data-retry-document-voice ${voiceRetryBusy ? 'disabled' : ''}>Réessayer le remplissage</button><button type="button" class="plain-button" data-copy-voice ${voiceRetryBusy ? 'disabled' : ''}>Copier le texte</button><button type="button" class="plain-button" data-dismiss-voice ${voiceRetryBusy ? 'disabled' : ''}>Fermer</button></div></div>` : ''}`);
+        statusAnchor.insertAdjacentHTML('afterend', `${voiceStatus ? `<p class="voice-status" role="status" aria-live="polite">${esc(voiceStatus)}</p>` : ''}${voiceSession ? `<div class="voice-live" aria-label="Paroles reconnues pendant la dictée"><strong>Ce que j’entends</strong><p data-live-transcript aria-live="polite">${esc(voiceLiveText || 'Parlez maintenant…')}</p></div>` : ''}${recovery ? `<div class="voice-recovery" role="alert"><strong>Paroles reconnues à vérifier</strong><p>L’analyse a échoué. Votre texte reconnu reste disponible ici.</p><textarea readonly rows="3" aria-label="Paroles reconnues">${esc(recovery)}</textarea><div><button type="button" class="plain-button" data-retry-document-voice ${voiceRetryBusy ? 'disabled' : ''}>Réessayer le remplissage</button><button type="button" class="plain-button" data-copy-voice ${voiceRetryBusy ? 'disabled' : ''}>Copier le texte</button><button type="button" class="plain-button" data-dismiss-voice ${voiceRetryBusy ? 'disabled' : ''}>Fermer</button></div></div>` : ''}`);
       }
       document.querySelectorAll('.line-entry').forEach((entry, index) => {
         const dictate = entry.querySelector('.line-dictate');
@@ -363,7 +364,7 @@
       if (!aiSettings) return `<div class="recent-backdrop"><div class="recent-panel ai-settings-panel" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title" tabindex="-1"><div class="recent-head"><h3 id="ai-settings-title">Réglages de l’IA</h3><button type="button" data-close-ai-settings aria-label="Fermer les réglages">✕</button></div><p>${settingsError ? esc(settingsError) : 'Chargement des réglages…'}</p></div></div>`;
       const provider = aiSettings?.provider || 'openai';
       const activeConfigured = provider === 'openai' ? aiSettings?.openaiConfigured : aiSettings?.zaiConfigured;
-      return `<div class="recent-backdrop"><div class="recent-panel ai-settings-panel" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title" tabindex="-1"><div class="recent-head"><h3 id="ai-settings-title">Réglages de l’IA</h3><button type="button" data-close-ai-settings aria-label="Fermer les réglages" ${settingsBusy ? 'disabled' : ''}>✕</button></div><p class="recent-hint">Choisissez le service utilisé pour la traduction, les descriptions et la dictée. Les paroles enregistrées et le contenu du client sont envoyés uniquement au service choisi.</p><fieldset class="provider-choices"><legend>Service pour les textes et la voix</legend><label><input type="radio" name="ai-provider" value="openai" ${provider === 'openai' ? 'checked' : ''} ${settingsBusy ? 'disabled' : ''}> OpenAI ${aiSettings?.openaiConfigured ? '· clé enregistrée' : ''}</label><label><input type="radio" name="ai-provider" value="zai" ${provider === 'zai' ? 'checked' : ''} ${settingsBusy ? 'disabled' : ''}> Z.ai ${aiSettings?.zaiConfigured ? '· clé enregistrée' : ''}</label></fieldset><p class="settings-note">Une clé d’API générale du service choisi est nécessaire. Votre abonnement Codex ou Z.ai Coding Plan ne donne pas automatiquement accès aux appels de cette application.</p><label for="ai-key">${activeConfigured ? 'Remplacer la clé du service choisi' : 'Ajouter la clé du service choisi'}<input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Clé d’API" ${settingsBusy ? 'disabled' : ''}></label><div class="folder-actions"><button type="button" class="primary" data-save-ai-key ${settingsBusy ? 'disabled' : ''}>Enregistrer la clé</button>${activeConfigured ? `<button type="button" class="plain-button" data-remove-ai-key ${settingsBusy ? 'disabled' : ''}>Supprimer la clé</button>` : ''}</div><p class="settings-note">La clé est gardée dans le coffre de Windows, séparément des brouillons et des PDF.</p>${settingsError ? `<p class="translation-error" role="alert">${esc(settingsError)}</p>` : ''}</div></div>`;
+      return `<div class="recent-backdrop"><div class="recent-panel ai-settings-panel" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title" tabindex="-1"><div class="recent-head"><h3 id="ai-settings-title">Réglages de l’IA</h3><button type="button" data-close-ai-settings aria-label="Fermer les réglages" ${settingsBusy ? 'disabled' : ''}>✕</button></div><p class="recent-hint">Le microphone est transcrit localement sur cet ordinateur avec Nemotron 3.5. Les paroles reconnues et le contenu du client sont envoyés au service choisi pour remplir le document, améliorer une ligne ou traduire.</p><fieldset class="provider-choices"><legend>Service pour comprendre et rédiger le texte</legend><label><input type="radio" name="ai-provider" value="openai" ${provider === 'openai' ? 'checked' : ''} ${settingsBusy ? 'disabled' : ''}> OpenAI ${aiSettings?.openaiConfigured ? '· clé enregistrée' : ''}</label><label><input type="radio" name="ai-provider" value="zai" ${provider === 'zai' ? 'checked' : ''} ${settingsBusy ? 'disabled' : ''}> Z.ai ${aiSettings?.zaiConfigured ? '· clé enregistrée' : ''}</label></fieldset><p class="settings-note">La transcription vocale locale ne nécessite pas de clé. Les fonctions IA de rédaction, remplissage et traduction nécessitent une clé d’API générale du service choisi. Votre abonnement Codex ou Z.ai Coding Plan ne donne pas automatiquement accès aux appels de cette application.</p><label for="ai-key">${activeConfigured ? 'Remplacer la clé du service choisi' : 'Ajouter la clé du service choisi'}<input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Clé d’API" ${settingsBusy ? 'disabled' : ''}></label><div class="folder-actions"><button type="button" class="primary" data-save-ai-key ${settingsBusy ? 'disabled' : ''}>Enregistrer la clé</button>${activeConfigured ? `<button type="button" class="plain-button" data-remove-ai-key ${settingsBusy ? 'disabled' : ''}>Supprimer la clé</button>` : ''}</div><p class="settings-note">La clé est gardée dans le coffre de Windows, séparément des brouillons et des PDF.</p>${settingsError ? `<p class="translation-error" role="alert">${esc(settingsError)}</p>` : ''}</div></div>`;
     }
     function invoiceNumberControl() {
       if (state.kind !== 'facture') return '';
@@ -672,15 +673,21 @@
       const assist = { index, draftId: state.id, source: original, transcript: '', proposal: '', style: 'prose', variation: 0, status: 'Écoute en cours… Rappuyez sur le micro pour terminer.', processing: false, recording: true };
       lineAssist = assist; voiceQueue = Promise.resolve(); render();
       try {
-        const controller = await startCapture({ segmentMs: 20000,
-          onSegment: blob => queueVoiceWork(async () => {
-            const audioBytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
-            const result = await runCommand('ai_transcribe_audio', { audioBytes });
+        assist.status = 'Chargement du moteur vocal local…'; render();
+        const url = await runCommand('start_local_asr');
+        const controller = await startStreamingRecognition({ url,
+          onPartial: partial => {
             if (lineAssist !== assist) return;
-            if (typeof result === 'string' && result.trim()) assist.transcript += `${assist.transcript ? ' ' : ''}${result.trim()}`;
+            const box = document.querySelectorAll('.line-entry')[index]?.querySelector('textarea[data-key="description"]');
+            if (box) box.value = [original, assist.transcript, partial].filter(Boolean).join('\n');
+          },
+          onFinal: text => {
+            if (lineAssist !== assist) return;
+            assist.transcript += `${assist.transcript ? ' ' : ''}${text}`;
             assist.status = 'Texte entendu. Continuez à parler ou rappuyez sur le micro.';
-            render();
-          }),
+            const box = document.querySelectorAll('.line-entry')[index]?.querySelector('textarea[data-key="description"]');
+            if (box) box.value = [original, assist.transcript].filter(Boolean).join('\n');
+          },
           onError: error => { if (lineAssist === assist) {
             activeCapture = null; assist.recording = false;
             if (assist.transcript.trim()) {
@@ -693,6 +700,7 @@
         });
         if (lineAssist !== assist || !assist.recording) { await controller.cancel(); return; }
         activeCapture = controller;
+        assist.status = 'Écoute en cours… Rappuyez sur le micro pour terminer.'; render();
       } catch (error) {
         activeCapture = null;
         assist.recording = false; assist.status = `Microphone indisponible : ${errorText(error)}`; render();
@@ -733,28 +741,51 @@
       englishMode = false;
       const session = createVoiceSession(state);
       voiceSession = session; voiceStatus = 'Écoute du document… Les champs apparaissent au fur et à mesure.';
+      voiceLiveText = '';
       voiceQueue = Promise.resolve(); render();
       try {
-        const controller = await startCapture({ segmentMs: 5000,
-          onSegment: blob => queueVoiceWork(async () => {
-            const audioBytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
-            const transcript = await runCommand('ai_transcribe_audio', { audioBytes });
+        voiceStatus = 'Chargement du moteur vocal local…'; render();
+        const url = await runCommand('start_local_asr');
+        const controller = await startStreamingRecognition({ url,
+          onPartial: partial => {
+            if (voiceSession !== session) return;
+            voiceLiveText = [session.transcript, partial].filter(Boolean).join(' ');
+            const live = document.querySelector('[data-live-transcript]');
+            if (live) live.textContent = voiceLiveText || 'Parlez maintenant…';
+          },
+          onFinal: transcript => {
             if (voiceSession !== session || !transcript?.trim()) return;
             session.transcript += `${session.transcript ? ' ' : ''}${transcript.trim()}`;
-            if (session.transcript.length > 20000) throw new Error('Dictée très longue. Arrêtez et vérifiez le document avant de continuer.');
-            voiceStatus = 'Paroles reconnues. Remplissage des champs…'; render();
-            const update = await runCommand('ai_extract_document', { transcript: session.transcript });
-            if (voiceSession !== session || state.id !== session.draftId) return;
-            const beforeVoiceUpdate = copy(state);
-            if (applyVoiceUpdate(state, update, session)) {
-              undoStack.push({ draft: beforeVoiceUpdate });
-              if (undoStack.length > 20) undoStack.shift();
-              undoGroup = null;
-              markDirty(); render();
-              await saveNow(true);
+            voiceLiveText = session.transcript;
+            if (session.transcript.length > 20000) {
+              voiceStatus = 'Dictée très longue. Arrêtez le microphone et vérifiez le document.';
+              render();
+              return;
             }
-            voiceStatus = 'Document mis à jour. Continuez à parler ou rappuyez sur le micro.'; render();
-          }),
+            const live = document.querySelector('[data-live-transcript]');
+            if (live) live.textContent = voiceLiveText;
+            const transcriptSoFar = session.transcript;
+            void queueVoiceWork(async () => {
+              voiceStatus = 'Paroles reconnues. Remplissage des champs…'; render();
+              const update = await runCommand('ai_extract_document', { transcript: transcriptSoFar });
+              if (voiceSession !== session || state.id !== session.draftId) return;
+              const beforeVoiceUpdate = copy(state);
+              if (applyVoiceUpdate(state, update, session)) {
+                undoStack.push({ draft: beforeVoiceUpdate });
+                if (undoStack.length > 20) undoStack.shift();
+                undoGroup = null;
+                markDirty(); render();
+                await saveNow(true);
+              }
+              voiceStatus = 'Document mis à jour. Continuez à parler ou rappuyez sur le micro.'; render();
+            }).catch(error => {
+              if (voiceSession === session) {
+                voiceRecovery = { session };
+                voiceStatus = `Analyse impossible : ${errorText(error)}. Vos paroles restent disponibles.`;
+                render();
+              }
+            });
+          },
           onError: error => { if (voiceSession === session) {
             activeCapture = null; voiceSession = null;
             if (session.transcript) voiceRecovery = { session };
@@ -764,6 +795,7 @@
         });
         if (voiceSession !== session || session.stopping) { await controller.cancel(); return; }
         activeCapture = controller;
+        voiceStatus = 'Écoute du document… Les champs apparaissent après chaque phrase.'; render();
       } catch (error) {
         activeCapture = null; voiceSession = null;
         voiceStatus = `Microphone indisponible : ${errorText(error)}`; render();

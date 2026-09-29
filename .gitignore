@@ -8,3 +8,6 @@ src-tauri/target/
 .env.*
 test-output/
 release-output/
+src-tauri/resources/nemotron/runtime/
+src-tauri/resources/nemotron/runtime.zip
+src-tauri/resources/nemotron/*.gguf

@@ -15,5 +15,7 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
 if exist "%USERPROFILE%\.tauri\invoice-company-app.key" set "TAURI_SIGNING_PRIVATE_KEY=%USERPROFILE%\.tauri\invoice-company-app.key"
 cd /d "%~dp0.."
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0prepare-nemotron.ps1"
+if errorlevel 1 exit /b %ERRORLEVEL%
 call npm run tauri build
 exit /b %ERRORLEVEL%

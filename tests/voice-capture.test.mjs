@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { startCapture } from '../web/voice-capture.js';
+import { startCapture, startStreamingRecognition } from '../web/voice-capture.js';
 
 async function withFakeMicrophone(run) {
   const names = ['navigator', 'AudioContext', 'webkitAudioContext'];
@@ -186,4 +186,56 @@ test('a rejected segment callback reports the error and cleans up automatically'
     assert.equal(deliveries, 1);
     assertReleased(tracks[0], contexts[0]);
   });
+});
+
+test('local streaming shows partial French text, delivers final utterances and flushes audio', async () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'WebSocket');
+  const sockets = [];
+  class FakeSocket {
+    static OPEN = 1;
+    readyState = 0;
+    sent = [];
+    constructor(url) {
+      assert.match(url, /^ws:\/\/127\.0\.0\.1:/);
+      sockets.push(this);
+      queueMicrotask(() => { this.readyState = 1; this.onopen?.(); });
+    }
+    send(data) {
+      this.sent.push(data);
+      if (typeof data === 'string' && JSON.parse(data).type === 'input_audio_buffer.commit') {
+        queueMicrotask(() => this.emit({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'Bonjour, Monsieur.' }));
+        queueMicrotask(() => this.emit({ type: 'input_audio_buffer.committed' }));
+      }
+    }
+    emit(data) { this.onmessage?.({ data: JSON.stringify(data) }); }
+    close() { this.readyState = 3; this.onclose?.(); }
+  }
+  Object.defineProperty(globalThis, 'WebSocket', { configurable: true, value: FakeSocket });
+  try {
+    await withFakeMicrophone(async ({ tracks, contexts, feed }) => {
+      const partials = [], finals = [], errors = [];
+      const capture = await startStreamingRecognition({
+        url: 'ws://127.0.0.1:12345/v1/audio/transcriptions/realtime?api_key=test',
+        onPartial: text => partials.push(text),
+        onFinal: text => finals.push(text),
+        onError: error => errors.push(error)
+      });
+      const socket = sockets[0];
+      assert.equal(JSON.parse(socket.sent[0]).session.language, 'fr-CA');
+      feed(5760, 0.25); // 120 ms at the fake 48 kHz microphone rate.
+      await delay(5);
+      assert.equal(socket.sent.filter(data => data instanceof ArrayBuffer).length, 1);
+      socket.emit({ type: 'conversation.item.input_audio_transcription.delta', delta: 'Bon' });
+      socket.emit({ type: 'conversation.item.input_audio_transcription.delta', delta: 'jour' });
+      assert.equal(partials.at(-1), 'Bonjour');
+      await capture.stop();
+      assert.deepEqual(finals, ['Bonjour, Monsieur.']);
+      assert.equal(partials.at(-1), '');
+      assert.deepEqual(errors, []);
+      assertReleased(tracks[0], contexts[0]);
+    });
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'WebSocket', original);
+    else delete globalThis.WebSocket;
+  }
 });
