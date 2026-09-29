@@ -19,8 +19,8 @@ Scope: integrate local French capable speech into the Windows app, deliver a sig
 - [x] G5: Updater-signed Windows installer contains the verified model, runtime, and notices and opens without terminal setup.
   EVIDENCE: 0.1.6 NSIS installer and Tauri updater .sig completed; silent install exited 0. Registry reports 0.1.6; installed model and runtime exist; installed model hash matches NVIDIA; installed runtime transcribed French; app process launched. state.json hash remained 3F51F08C...062E27064AC. This is not a Windows Authenticode code signature.
 
-- [ ] G6: Public release, update manifest, and installed version match.
-  EVIDENCE: pending
+- [x] G6: Public release, update manifest, and installed version match.
+  EVIDENCE: Public GitHub v0.1.6 release is published with installer, .sig, and latest.json. GitHub reports installer size 703941467 and SHA-256 matching the local release copy (87D0B06F...AD4B518). latest.json resolves to 0.1.6 and the exact installer URL. Git tag points at the source commit bb5e103; Windows registry reports installed version 0.1.6.
 
 - [x] G7: Frontend and native regression tests pass.
   EVIDENCE: npm run check passed 11 tests; scripts/check-rust.cmd passed 16 native tests; git diff --check found no whitespace errors.
