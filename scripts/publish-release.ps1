@@ -1,6 +1,12 @@
 param([string]$Repository = 'foodcel/invoice-company-app')
 
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    $releaseModernShell = Get-Command pwsh -ErrorAction SilentlyContinue
+    if (-not $releaseModernShell) { throw 'Release publishing requires PowerShell 7 (pwsh). Run this script there.' }
+    & $releaseModernShell.Source -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -Repository $Repository
+    exit $LASTEXITCODE
+}
 $appRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $package = Get-Content -LiteralPath (Join-Path $appRoot 'package.json') -Raw | ConvertFrom-Json
 $version = [string]$package.version

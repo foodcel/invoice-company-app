@@ -14,8 +14,8 @@ Scope: approved option 1, legacy deposits, saved rows, preview, French/English P
   CHECK: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-release.ps1
   EXPECT: Release files ready:
   EVIDENCE: v0.1.11 NSIS installer (671.31 MiB), updater signature and latest.json generated successfully. Manifest version, exact installer URL and signature checked. Installer SHA256: 4D10563B749D3F04AEB8A77847F680AAC691C694D61DAF0E43C0B1A8AB209EAA.
-- [ ] P4: The public latest release contains the matching installer, signature and manifest; updater URL serves the new version.
-  EVIDENCE: pending public release and manifest verification.
+- [x] P4: The public latest release contains the matching installer, signature and manifest; updater URL serves the new version.
+  EVIDENCE: stable published v0.1.11 at https://github.com/foodcel/invoice-company-app/releases/tag/v0.1.11. All three asset sizes and public GitHub SHA256 digests match local files. The exact configured latest/download/latest.json endpoint returns 0.1.11 with the matching installer URL and signature. Remote release tag points to 4f316113413669eb49bf06545e8a4bdc105b308f. Dad's actual download/install is not observed here.
 - [x] P5: The PC installation reports the new version and existing draft data is preserved.
   EVIDENCE: silent installer exited 0; registry and executable version are 0.1.11. Installed executable matches every build byte except Tauri's three-byte package marker (UNK becomes NSS for NSIS, verified against tauri-utils platform.rs). Normal and Codex-virtualized draft files keep their pre-install SHA256; private backups are in ignored test-output/pre-v0.1.11.
 
