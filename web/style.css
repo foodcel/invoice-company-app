@@ -163,6 +163,26 @@
     .line-header .remove-line { align-self: center; }
     .optional-fields { margin-top: 20px; padding-top: 17px; border-top: 1px solid var(--border); }
     .optional-fields h4 { margin: 0 0 12px; color: var(--ink); font-size: 14px; }
+    .payment-fields { grid-column: 1 / -1; min-width: 0; }
+    .payment-label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 12px; font-weight: 650; }
+    .payment-list { display: grid; gap: 9px; }
+    .payment-entry { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .payment-shell { display: flex; align-items: stretch; flex: 1; min-width: 0; height: 47px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+    .payment-shell:hover { border-color: var(--accent); box-shadow: inset 0 0 0 2px #42a87524; }
+    .payment-shell:focus-within { border-color: var(--accent); box-shadow: inset 0 0 0 3px #42a87538; }
+    .payment-amount { display: flex; align-items: center; flex: 1; min-width: 0; padding-right: 10px; }
+    .payment-amount input { min-width: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 10px 11px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+    .payment-amount > span { color: var(--muted); font-size: 13px; }
+    .payment-date { display: flex; justify-content: center; align-items: center; gap: 8px; flex: none; width: 176px; padding: 0 9px; border: 0; border-left: 1px solid var(--border); background: var(--soft); color: var(--accent); font-size: 14px; font-weight: 600; white-space: nowrap; }
+    .payment-date:hover, .payment-date[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: inset 0 0 0 2px #42a87538; }
+    .payment-date svg, .payment-remove svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .payment-remove { display: grid; place-items: center; flex: none; width: 40px; height: 40px; padding: 0; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--muted); }
+    .payment-remove:hover { background: #fff1ef; border-color: #e6aba6; color: #b42318; box-shadow: inset 0 0 0 2px #f6c5c0; }
+    .payment-shell:has([aria-invalid="true"]) { border-color: #b42318; box-shadow: inset 0 0 0 3px #dd55402e; }
+    .app.dark .payment-remove:hover { background: #5b2828; color: #ffb7ae; }
+    .payment-entry .date-popover { right: 47px; }
+    .payment-total { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 13px; color: var(--muted); font-size: 12px; }
+    .payment-total strong { color: var(--ink); font-size: 14px; }
     .summary-section { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; margin-top: 17px; }
     .language-panel { min-width: 0; height: 70px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 5px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
     .language-panel:only-child { grid-column: 1 / -1; }
@@ -240,6 +260,11 @@
     .v1 .doc1 .paper-table th:nth-child(3), .v1 .doc1 .paper-table td:nth-child(3) { text-align: right; }
     .doc1-closing { display: grid; grid-template-columns: 1fr 48%; gap: 20px; align-items: end; margin-top: auto; padding-top: 18px; flex: none; }
     .doc1-note { grid-column: 1; }
+    .doc1-extras { grid-column: 1; min-width: 0; }
+    .doc1-payments { margin-top: 15px; }
+    .doc1-payments b { display: block; margin-bottom: 8px; color: #6f503f; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+    .payment-detail { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; color: #68736e; font-size: 11px; }
+    .payment-detail strong { white-space: nowrap; font-weight: 600; color: #23302c; }
     .doc1-note b { color: #6f503f; display: block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
     .doc1-note p { margin: 9px 0 0; color: #68736e; font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
     .v1 .doc1 .paper-table { flex: none; }
@@ -353,6 +378,7 @@
     }
     @container editor (max-width: 430px) {
       .summary-section { grid-template-columns: minmax(0, 1fr); }
+      .payment-date { width: 166px; }
     }
     @media (max-width: 600px) {
       .app-top { flex-wrap: wrap; }

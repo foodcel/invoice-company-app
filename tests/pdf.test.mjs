@@ -82,3 +82,32 @@ test('English quote keeps the French numeric facts on Letter paper', async () =>
   assert.deepEqual(document.getPage(0).getSize(), { width: 612, height: 792 });
   assert.deepEqual(calculateTotals(english), calculateTotals(french));
 });
+
+test('dated payments preserve taxes and produce French and English customer copies', async () => {
+  const draft = sampleDraft('facture');
+  draft.payments = [{ amount: '40,25', date: '2026-09-18' }, { amount: '15,50', date: '2026-09-25' }, { amount: '', date: '' }];
+  assert.deepEqual(calculateTotals(draft), { subtotal: 250, tps: 12.5, tvq: 24.94, total: 287.44, deposit: 55.75, balance: 231.69 });
+  await mkdir(output, { recursive: true });
+  for (const language of ['fr', 'en']) {
+    const bytes = await createPdf(draft, { invoiceNumber: 2060, language });
+    const document = await PDFDocument.load(bytes);
+    assert.equal(document.getPageCount(), 1);
+    assert.deepEqual(document.getPage(0).getSize(), { width: 612, height: 792 });
+    await writeFile(new URL(`payments-${language}-test.pdf`, output), bytes);
+  }
+  draft.payments[1].date = '2026-02-30';
+  await assert.rejects(createPdf(draft, { invoiceNumber: 2060 }), /Date du paiement 2 invalide/);
+});
+
+test('long notes and 90 dated payments paginate on Letter pages', async () => {
+  const draft = sampleDraft('facture');
+  draft.notes = Array.from({ length: 48 }, (_, i) => `Note ${i + 1} : informations complémentaires confirmées par le client.`).join('\n');
+  draft.payments = Array.from({ length: 90 }, (_, i) => ({ amount: String(i + 1), date: `2026-09-${String(i % 28 + 1).padStart(2, '0')}` }));
+  assert.equal(calculateTotals(draft).deposit, 4095);
+  const bytes = await createPdf(draft, { invoiceNumber: 2060 });
+  const document = await PDFDocument.load(bytes);
+  assert.ok(document.getPageCount() >= 4);
+  for (const page of document.getPages()) assert.deepEqual(page.getSize(), { width: 612, height: 792 });
+  await mkdir(output, { recursive: true });
+  await writeFile(new URL('payments-long-test.pdf', output), bytes);
+});

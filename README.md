@@ -21,6 +21,8 @@ The microphone in the document header fills the document while you speak. A tran
 
 The next invoice number starts at **2060**. Saving a draft does not issue a number. The first successful PDF export of an invoice fixes its number; later saves and exports of that invoice keep it. Use the pen beside the displayed number to change an unissued invoice number; an issued invoice cannot be renumbered.
 
+In **Au besoin**, enter each deposit or received payment as its own row. Choose its date on the right, and use **Ajouter un paiement** (or **Ajouter un dépôt**) below the rows to add another. Dates are optional; an older deposit stays intact and is marked **Date non précisée** until a date is entered. Blank rows do not appear on the customer document. The French and English PDFs list each positive payment, its date, the combined amount, and the remaining balance after tax. Payments do not change the tax calculation or invoice number.
+
 ## Build and test on Windows
 
 The build PC needs Node.js, Rust (MSVC toolchain), Microsoft C++ Build Tools, and the Tauri updater signing key. `build-windows.cmd` downloads and SHA-256 verifies the pinned Windows CPU runtime and 742 MB Nemotron model, then bundles both into the installer. Run from this folder:

@@ -2,6 +2,7 @@ import {
   PDFDocument, StandardFonts, rgb,
   pushGraphicsState, popGraphicsState, rectangle, clip, endPath,
 } from 'pdf-lib';
+import { paymentTotal, customerPayments } from './payments.js';
 
 // This is the existing mockup artwork. Only its wood-grain symbol is clipped
 // into the PDF; the lettering in the PNG is never drawn.
@@ -31,16 +32,16 @@ const LABELS = {
       description: 'DESCRIPTION', quantity: 'QTÉ', unitPrice: 'PRIX UNITAIRE', amount: 'MONTANT',
       line: 'LIGNE', continued: 'SUITE', subtotal: 'Sous-total',
       gst: 'TPS (5 %)', qst: 'TVQ (9,975 %)', total: 'Total avec taxes',
-      note: 'NOTE POUR LE CLIENT', noDate: 'Aucune', invoiceNumber: 'Facture n°',
+      note: 'NOTE POUR LE CLIENT', noDate: 'Aucune', paymentNoDate: 'Date non précisée', invoiceNumber: 'Facture n°',
       gstId: 'TPS', qstId: 'TVQ', subject: 'Document client',
     },
     soumission: {
       title: 'Soumission', party: 'Proposition pour', date: 'Valide jusqu’au',
-      deposit: 'Dépôt demandé', balance: 'Solde après dépôt',
+      deposit: 'Total des dépôts', payments: 'DÉPÔTS DEMANDÉS', balance: 'Solde après dépôt',
     },
     facture: {
       title: 'Facture', party: 'Facturé à', date: 'Date limite de paiement',
-      deposit: 'Dépôt reçu', balance: 'Solde à payer',
+      deposit: 'Total reçu', payments: 'PAIEMENTS REÇUS', balance: 'Solde à payer',
     },
   },
   en: {
@@ -51,16 +52,16 @@ const LABELS = {
       description: 'DESCRIPTION', quantity: 'QTY', unitPrice: 'UNIT PRICE', amount: 'AMOUNT',
       line: 'LINE', continued: 'CONTINUED', subtotal: 'Subtotal',
       gst: 'GST (5%)', qst: 'QST (9.975%)', total: 'Total incl. tax',
-      note: 'NOTE FOR CUSTOMER', noDate: 'None', invoiceNumber: 'Invoice no.',
+      note: 'NOTE FOR CUSTOMER', noDate: 'None', paymentNoDate: 'Date not specified', invoiceNumber: 'Invoice no.',
       gstId: 'GST', qstId: 'QST', subject: 'Customer document',
     },
     soumission: {
       title: 'Quote', party: 'Prepared for', date: 'Valid until',
-      deposit: 'Deposit requested', balance: 'Balance after deposit',
+      deposit: 'Total deposits', payments: 'DEPOSITS REQUESTED', balance: 'Balance after deposit',
     },
     facture: {
       title: 'Invoice', party: 'Bill to', date: 'Payment due',
-      deposit: 'Deposit received', balance: 'Balance due',
+      deposit: 'Total received', payments: 'PAYMENTS RECEIVED', balance: 'Balance due',
     },
   },
 };
@@ -125,7 +126,8 @@ export function calculateTotals(draft) {
   const tps = roundCents(subtotal / 100 * 0.05);
   const tvq = roundCents(subtotal / 100 * 0.09975);
   const total = subtotal + tps + tvq;
-  const deposit = roundCents(amount(draft.deposit, 'Dépôt', { optional: true }));
+  customerPayments(draft); // Validate row amounts/dates before using their total.
+  const deposit = roundCents(paymentTotal(draft));
   return Object.freeze({
     subtotal: subtotal / 100, tps: tps / 100, tvq: tvq / 100,
     total: total / 100, deposit: deposit / 100,
@@ -489,8 +491,28 @@ export async function createPdf(draft, { invoiceNumber = null, language = 'fr' }
       drawText(page, at ? `${labels.note} · ${labels.continued}` : labels.note, LEFT, noteTop, bold, 9, brown);
       const chunk = lines.slice(at, at + capacity);
       drawLines(page, chunk, LEFT, noteTop + 19, normal, 10.5, NOTE_LINE, muted);
+      cursor = noteTop + 19 + chunk.length * NOTE_LINE;
       at += chunk.length;
       if (at < lines.length) nextPage(false);
+    }
+  }
+  const payments = customerPayments(draft);
+  if (payments.length) {
+    let at = 0;
+    while (at < payments.length) {
+      const paymentTop = cursor + 19;
+      const capacity = Math.floor((713 - paymentTop - 24) / 22);
+      if (capacity < 1) { nextPage(false); continue; }
+      drawText(page, at ? `${labels.payments} · ${labels.continued}` : labels.payments, LEFT, paymentTop, bold, 9, brown);
+      const chunk = payments.slice(at, at + capacity);
+      chunk.forEach((payment, index) => {
+        const y = paymentTop + 22 + index * 22;
+        drawText(page, payment.date ? displayDate(payment.date, true, language) : labels.paymentNoDate, LEFT, y, normal, 10, muted);
+        drawRight(page, money(payment.amount, language), 291, y, normal, 10);
+      });
+      cursor = paymentTop + 22 + chunk.length * 22;
+      at += chunk.length;
+      if (at < payments.length) nextPage(false);
     }
   }
   drawTotals(page, context, totals);

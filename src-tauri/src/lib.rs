@@ -36,6 +36,12 @@ pub struct Item {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct Payment {
+    pub amount: String,
+    pub date: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct EnglishCopy {
     pub source_project: String,
@@ -63,6 +69,8 @@ pub struct Draft {
     pub project: String,
     pub notes: String,
     pub deposit: String,
+    #[serde(default)]
+    pub payments: Option<Vec<Payment>>,
     pub items: Vec<Item>,
     #[serde(default)]
     pub english_copy: Option<EnglishCopy>,
@@ -175,6 +183,7 @@ fn blank_draft(kind: Kind) -> Draft {
         project: String::new(),
         notes: String::new(),
         deposit: String::new(),
+        payments: Some(vec![Payment { amount: String::new(), date: String::new() }]),
         items: vec![Item {
             description: String::new(),
             quantity: "1".into(),
@@ -694,6 +703,7 @@ impl Repository {
 }
 
 fn update_draft(store: &mut Store, mut incoming: Draft) -> AppResult<()> {
+    migrate_draft_payments(&mut incoming);
     let index = store.index(&incoming.id)?;
     let old = store.records[index].draft.clone();
     if old.issued_number.is_some() && incoming.kind != Kind::Facture {
@@ -786,6 +796,19 @@ fn validate_draft(draft: &Draft) -> AppResult<()> {
             return Err("Une ligne contient un caractère invalide.".into());
         }
     }
+    if let Some(payments) = &draft.payments {
+        if payments.len() > 500 {
+            return Err("Maximum de 500 paiements par document.".into());
+        }
+        for payment in payments {
+            if payment.amount.len() > 100 || payment.amount.chars().any(|ch| ch.is_control()) {
+                return Err("Montant de paiement trop long ou invalide.".into());
+            }
+            if !payment.date.is_empty() && !valid_date(&payment.date) {
+                return Err("Date de paiement invalide.".into());
+            }
+        }
+    }
     if let Some(copy) = &draft.english_copy {
         if copy.source_project.len() > 500
             || copy.project.len() > 500
@@ -871,7 +894,15 @@ fn validate_export_draft(draft: &Draft) -> AppResult<()> {
             return Err(format!("Prix invalide à la ligne {}.", index + 1));
         }
     }
-    if !draft.deposit.trim().is_empty() && parse_nonnegative(&draft.deposit).is_none() {
+    if let Some(payments) = &draft.payments {
+        for (index, payment) in payments.iter().enumerate() {
+            if (payment.amount.trim().is_empty() && !payment.date.is_empty())
+                || (!payment.amount.trim().is_empty() && parse_nonnegative(&payment.amount).is_none())
+            {
+                return Err(format!("Montant du paiement {} invalide.", index + 1));
+            }
+        }
+    } else if !draft.deposit.trim().is_empty() && parse_nonnegative(&draft.deposit).is_none() {
         return Err("Dépôt invalide.".into());
     }
     Ok(())
@@ -1032,9 +1063,20 @@ fn read_store(path: &Path) -> AppResult<Option<Store>> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.to_string()),
     };
-    let store: Store = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    let mut store: Store = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    for record in &mut store.records { migrate_draft_payments(&mut record.draft); }
+    for versions in store.versions.values_mut() {
+        for draft in versions { migrate_draft_payments(draft); }
+    }
+    if let Some(pending) = &mut store.pending_export { migrate_draft_payments(&mut pending.snapshot); }
     validate_store(&store)?;
     Ok(Some(store))
+}
+
+fn migrate_draft_payments(draft: &mut Draft) {
+    if draft.payments.is_none() {
+        draft.payments = Some(vec![Payment { amount: draft.deposit.clone(), date: String::new() }]);
+    }
 }
 
 fn issue(result: &AppResult<Option<Store>>) -> String {
@@ -1440,6 +1482,7 @@ mod tests {
         let mut draft = ready_invoice(&repo);
         draft.project = "Escalier".into();
         draft.notes = "Installation incluse".into();
+        draft.payments = Some(vec![Payment { amount: "40,25".into(), date: "2026-09-18".into() }, Payment { amount: "15,50".into(), date: "2026-09-25".into() }]);
         draft.english_copy = Some(EnglishCopy {
             source_project: draft.project.clone(),
             source_notes: draft.notes.clone(),
@@ -1457,11 +1500,71 @@ mod tests {
         assert!(en.filename.contains("_EN.pdf"));
         assert_eq!(en.snapshot.items[0].description, "Travail");
         assert_eq!(en.snapshot.issued_number, Some(2060));
+        assert_eq!(en.snapshot.payments.as_ref().unwrap().len(), 2);
         assert_eq!(repo.load_state().unwrap().next_invoice_number, 2061);
         let fr = repo.export_pdf(en.snapshot, PDF.to_vec(), Some(2060), "fr".into()).unwrap();
         assert_eq!(fr.invoice_number, Some(2060));
         assert_eq!(repo.load_state().unwrap().next_invoice_number, 2061);
         assert!(repo.backup().exists());
+    }
+
+    #[test]
+    fn legacy_deposit_migration_preserves_undated_amount_and_dated_rows_after_restore() {
+        let (_temp, repo) = setup();
+        let draft = ready_invoice(&repo);
+        repo.save_draft(draft.clone()).unwrap();
+        let mut store = repo.load().unwrap();
+        let index = store.index(&draft.id).unwrap();
+        store.records[index].draft.deposit = "75,00".into();
+        let mut value = serde_json::to_value(&store).unwrap();
+        for record in value["records"].as_array_mut().unwrap() {
+            record["draft"].as_object_mut().unwrap().remove("payments");
+        }
+        for versions in value["versions"].as_object_mut().unwrap().values_mut() {
+            for version in versions.as_array_mut().unwrap() { version.as_object_mut().unwrap().remove("payments"); }
+        }
+        let bytes = serde_json::to_vec_pretty(&value).unwrap();
+        fs::write(repo.primary(), &bytes).unwrap();
+        fs::write(repo.backup(), &bytes).unwrap();
+        let loaded = repo.load_state().unwrap();
+        assert_eq!(loaded.next_invoice_number, 2060);
+        assert_eq!(loaded.current.payments.as_ref().unwrap(), &vec![Payment { amount: "75,00".into(), date: String::new() }]);
+        assert_eq!(fs::read(repo.primary()).unwrap(), bytes);
+        let mut edited = loaded.current;
+        edited.payments = Some(vec![Payment { amount: "40".into(), date: "2026-09-18".into() }, Payment { amount: "35".into(), date: "2026-09-25".into() }]);
+        repo.save_draft(edited.clone()).unwrap();
+        assert_eq!(repo.open_draft(&draft.id).unwrap().current.payments, edited.payments);
+        fs::write(repo.primary(), b"{corrupt").unwrap();
+        assert_eq!(repo.load_state().unwrap().current.payments, edited.payments);
+        let restored = repo.restore_previous(&draft.id).unwrap().current;
+        assert_eq!(restored.payments.unwrap()[0].amount, "75,00");
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 2060);
+    }
+
+    #[test]
+    fn cleared_payments_are_not_recreated_from_legacy_deposit() {
+        let (_temp, repo) = setup();
+        let mut draft = ready_invoice(&repo);
+        draft.deposit = "75,00".into();
+        draft.payments = Some(vec![]);
+        repo.save_draft(draft.clone()).unwrap();
+        assert!(repo.load_state().unwrap().current.payments.unwrap().is_empty());
+        assert!(repo.export_pdf(draft, PDF.to_vec(), Some(2060), "fr".into()).is_ok());
+    }
+
+    #[test]
+    fn invalid_payment_export_never_issues_an_invoice_number() {
+        let (_temp, repo) = setup();
+        let mut draft = ready_invoice(&repo);
+        for amount in ["-1", "abc", "1000000001", ""] {
+            draft.payments = Some(vec![Payment { amount: amount.into(), date: "2026-09-18".into() }]);
+            repo.save_draft(draft.clone()).unwrap();
+            assert!(repo.export_pdf(draft.clone(), PDF.to_vec(), Some(2060), "fr".into()).is_err());
+            assert_eq!(repo.load_state().unwrap().next_invoice_number, 2060);
+        }
+        draft.payments = Some(vec![Payment { amount: "10".into(), date: "2026-02-30".into() }]);
+        assert!(repo.save_draft(draft).is_err());
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 2060);
     }
 
     #[test]

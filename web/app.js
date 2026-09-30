@@ -3,6 +3,7 @@
     import { relaunch } from '@tauri-apps/plugin-process';
     import { open as pickFolder } from '@tauri-apps/plugin-dialog';
     import { createPdf } from './pdf.js';
+    import { paymentRows, paymentTotal, paymentIssues } from './payments.js';
     import { startStreamingRecognition } from './voice-capture.js';
     import { createVoiceSession, releaseVoiceField, releaseVoiceItem, applyVoiceUpdate } from './voice-workflow.js';
     import businessCardImage from './assets/business-card-image.png';
@@ -81,6 +82,7 @@
         state.issuedNumber = snapshot.current.issuedNumber;
       }
       if (state && (!Array.isArray(state.items) || !state.items.length)) state.items = [{ description: '', quantity: '1', price: '' }];
+      if (state && !Array.isArray(state.payments)) state.payments = paymentRows(state);
     }
     function runCommand(name, args) {
       const task = commandQueue.catch(() => {}).then(() => invoke(name, args));
@@ -170,7 +172,7 @@
     const tps = () => cents(total() * 0.05);
     const tvq = () => cents(total() * 0.09975);
     const gross = () => cents(total() + tps() + tvq());
-    const deposit = () => cents(value(state.deposit));
+    const deposit = () => paymentTotal(state);
     const balance = () => Math.max(0, cents(gross() - deposit()));
     const kindTitle = () => state.kind === 'facture' ? 'Facture' : 'Soumission';
     const englishCurrent = () => {
@@ -206,8 +208,12 @@
     const displayDate = iso => { const date = parseDate(iso); return date ? `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()}` : ''; };
     const monthNames = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
     const dateNames = { date: 'la date du document', validUntil: 'la date de validité', dueDate: 'la date limite de paiement' };
+    const paymentIndex = field => /^payment-(\d+)$/.exec(field)?.[1];
+    const dateValue = field => paymentIndex(field) !== undefined ? state.payments[Number(paymentIndex(field))]?.date || '' : state[field];
+    const dateName = field => paymentIndex(field) !== undefined ? `la date du paiement ${Number(paymentIndex(field)) + 1}` : dateNames[field];
+    const paymentDate = iso => parseDate(iso) ? new Intl.DateTimeFormat('fr-CA', { day: 'numeric', month: 'short', year: 'numeric' }).format(parseDate(iso)) : '';
     function calendarPopover(field) {
-      const view = calendarView || parseDate(state[field]) || new Date();
+      const view = calendarView || parseDate(dateValue(field)) || new Date();
       const year = view.year ?? view.getFullYear();
       const month = view.month ?? view.getMonth();
       const offset = (new Date(year, month, 1).getDay() + 6) % 7;
@@ -216,11 +222,11 @@
         const day = index + 1;
         const iso = `${year}-${pad2(month + 1)}-${pad2(day)}`;
         const spoken = new Intl.DateTimeFormat('fr-CA', { dateStyle: 'full' }).format(new Date(year, month, day));
-        return `<button type="button" data-calendar-day="${iso}" aria-label="${esc(spoken)}" aria-selected="${state[field] === iso}" data-today="${today() === iso}">${day}</button>`;
+        return `<button type="button" data-calendar-day="${iso}" aria-label="${esc(spoken)}" aria-selected="${dateValue(field) === iso}" data-today="${today() === iso}">${day}</button>`;
       }).join('');
       const months = monthNames.map((name, index) => `<option value="${index}" ${index === month ? 'selected' : ''}>${name}</option>`).join('');
       const years = Array.from({ length: 201 }, (_, index) => 1900 + index).map(option => `<option value="${option}" ${option === year ? 'selected' : ''}>${option}</option>`).join('');
-      return `<div class="date-popover" role="dialog" aria-label="Choisir ${dateNames[field]}"><div class="calendar-toolbar"><button type="button" data-calendar-prev aria-label="Mois précédent">‹</button><select data-calendar-month aria-label="Mois">${months}</select><select data-calendar-year aria-label="Année">${years}</select><button type="button" data-calendar-next aria-label="Mois suivant">›</button></div><div class="calendar-grid">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(day => `<b aria-hidden="true">${day}</b>`).join('')}${'<span aria-hidden="true"></span>'.repeat(offset)}${days}</div><div class="calendar-actions"><button type="button" data-calendar-today>Aujourd’hui</button>${field === 'dueDate' ? '<button type="button" data-calendar-clear>Aucune date</button>' : ''}</div></div>`;
+      return `<div class="date-popover" role="dialog" aria-label="Choisir ${dateName(field)}"><div class="calendar-toolbar"><button type="button" data-calendar-prev aria-label="Mois précédent">‹</button><select data-calendar-month aria-label="Mois">${months}</select><select data-calendar-year aria-label="Année">${years}</select><button type="button" data-calendar-next aria-label="Mois suivant">›</button></div><div class="calendar-grid">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(day => `<b aria-hidden="true">${day}</b>`).join('')}${'<span aria-hidden="true"></span>'.repeat(offset)}${days}</div><div class="calendar-actions"><button type="button" data-calendar-today>Aujourd’hui</button>${field === 'dueDate' || paymentIndex(field) !== undefined ? '<button type="button" data-calendar-clear>Effacer la date</button>' : ''}</div></div>`;
     }
     function dateControl(field, label, span = '') {
       const open = calendarField === field;
@@ -228,7 +234,7 @@
     }
     function toggleCalendar(field) {
       if (calendarField === field) { calendarField = null; calendarView = null; render(); return; }
-      const initial = parseDate(state[field]) || new Date();
+      const initial = parseDate(dateValue(field)) || new Date();
       calendarField = field;
       calendarView = { year: initial.getFullYear(), month: initial.getMonth() };
       render();
@@ -244,10 +250,28 @@
     function chooseDate(iso) {
       const field = calendarField;
       if (!field || (iso && !parseDate(iso))) return;
-      if (state[field] !== iso) { rememberUndo(); state[field] = iso; }
+      if (dateValue(field) !== iso) {
+        rememberUndo();
+        if (paymentIndex(field) !== undefined) state.payments[Number(paymentIndex(field))].date = iso;
+        else state[field] = iso;
+      }
       calendarField = null; calendarView = null;
       render(); markDirty(); void saveNow();
-      document.querySelector(`[data-date-display="${field}"]`)?.focus();
+      document.querySelector(`[data-calendar="${field}"]`)?.focus();
+    }
+    function paymentsControl() {
+      const invoice = state.kind === 'facture';
+      return `<div class="span2 payment-fields"><span class="payment-label">${invoice ? 'Dépôts et paiements reçus ($)' : 'Dépôts demandés ($)'} <span class="optional">(facultatif)</span></span><div class="payment-list">${state.payments.map((payment, index) => {
+        const field = `payment-${index}`, open = calendarField === field;
+        return `<div class="payment-entry date-wrap" data-date-wrap="${field}"><div class="payment-shell"><div class="payment-amount"><input data-payment="${index}" aria-label="Montant du paiement ${index + 1}" inputmode="decimal" value="${esc(payment.amount)}" placeholder="Montant"><span>$</span></div><button type="button" class="payment-date" data-calendar="${field}" aria-label="Choisir ${dateName(field)}${payment.date ? ' : ' + esc(paymentDate(payment.date)) : ''}" title="Choisir la date" aria-haspopup="dialog" aria-expanded="${open}"><span>${esc(paymentDate(payment.date) || 'Choisir une date')}</span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M8 14h2M14 14h2M8 18h2"/></svg></button></div><button type="button" class="payment-remove" data-remove-payment="${index}" aria-label="Retirer le paiement ${index + 1}" title="Retirer ce paiement"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5 19 19M19 5 5 19"/></svg></button>${open ? calendarPopover(field) : ''}</div>`;
+      }).join('')}</div><button type="button" class="add-button" data-add-payment>+ Ajouter ${invoice ? 'un paiement' : 'un dépôt'}</button><div class="payment-total"><span>${invoice ? 'Total reçu' : 'Total des dépôts'}</span><strong data-preview="deposit">${money(deposit())}</strong></div></div>`;
+    }
+    function paymentBreakdown() {
+      const en = englishMode, invoice = state.kind === 'facture';
+      const rows = paymentRows(state).filter(payment => value(payment.amount) > 0);
+      if (!rows.length) return '';
+      const title = en ? (invoice ? 'Payments received' : 'Deposits requested') : (invoice ? 'Paiements reçus' : 'Dépôts demandés');
+      return `<b>${title}</b>${rows.map(payment => `<div class="payment-detail"><span>${esc(displayDate(payment.date) || (en ? 'Date not specified' : 'Date non précisée'))}</span><strong>${money(value(payment.amount))}</strong></div>`).join('')}`;
     }
     const input = (field, label, placeholder = '', type = 'text', span = '') => type === 'date' ? dateControl(field, label, span) : `<label class="${span}">${label}<input data-field="${field}" type="${type}" value="${esc(state[field])}" placeholder="${esc(placeholder)}" ${field === 'client' ? 'required' : ''}></label>`;
     const textArea = (field, label, placeholder = '', span = '', rows = 2) => `<label class="${span}">${label}<textarea data-field="${field}" rows="${rows}" placeholder="${esc(placeholder)}">${esc(state[field] || '')}</textarea></label>`;
@@ -272,7 +296,7 @@
         <div><span>${en ? 'GST (5%)' : 'TPS (5 %)'}</span><span data-preview="tps">${money(tps())}</span></div>
         <div><span>${en ? 'QST (9.975%)' : 'TVQ (9,975 %)'}</span><span data-preview="tvq">${money(tvq())}</span></div>
         <div class="grand"><span>${en ? 'Total including taxes' : 'Total avec taxes'}</span><span data-preview="gross">${money(gross())}</span></div>
-        <div data-deposit-row ${hasDeposit ? '' : 'hidden'}><span>${en ? (invoice ? 'Deposit received' : 'Deposit requested') : (invoice ? 'Dépôt reçu' : 'Dépôt demandé')}</span><span data-preview="deposit">${money(deposit())}</span></div>
+        <div data-deposit-row ${hasDeposit ? '' : 'hidden'}><span>${en ? (invoice ? 'Total received' : 'Total deposits') : (invoice ? 'Total reçu' : 'Total des dépôts')}</span><span data-preview="deposit">${money(deposit())}</span></div>
         <div class="balance" data-deposit-row ${hasDeposit ? '' : 'hidden'}><span>${en ? (invoice ? 'Balance due' : 'Balance after deposit') : (invoice ? 'Solde à payer' : 'Solde après dépôt')}</span><span data-preview="balance">${money(balance())}</span></div>
       </div>`;
       return `<div class="paper doc1">
@@ -280,7 +304,7 @@
         <div class="doc1-summary"><div><b>${en ? 'Project' : 'Projet'}</b><strong class="project-name" data-preview="project">${esc(view.project || (en ? 'Project name' : 'Nom du projet'))}</strong></div><div><b>${en ? 'Document date' : 'Date du document'}</b><span data-preview="date">${esc(displayDate(state.date))}</span></div><div><b>${dateLabel}</b><span data-preview="${dateField}">${esc(displayDate(state[dateField]) || (invoice ? (en ? 'None' : 'Aucune') : ''))}</span></div></div>
         <div class="doc1-parties"><div class="doc1-party"><b>${en ? (invoice ? 'Bill to' : 'Prepared for') : (invoice ? 'Facturé à' : 'Proposition pour')}</b><strong data-preview="client">${esc(state.client || (en ? 'Client name' : 'Nom du client'))}</strong><p><span data-preview="address">${esc(state.address || (en ? 'Billing address' : 'Adresse de facturation'))}</span><span data-phone-block ${state.contact?.trim() ? '' : 'hidden'}><br>${en ? 'Tel.' : 'Tél.'} <span data-preview="contact">${esc(state.contact || '')}</span></span><span data-email-block ${state.email?.trim() ? '' : 'hidden'}><br>${en ? 'Email' : 'Courriel'} : <span data-preview="email">${esc(state.email || '')}</span></span></p><div class="doc1-ship" data-shipping-block ${state.shipTo?.trim() ? '' : 'hidden'}><b>${en ? 'Deliver to' : 'Livrer à'}</b><span data-preview="shipTo">${esc(state.shipTo || '')}</span></div></div><div class="doc1-party"><b>${en ? 'Issued by' : 'Émis par'}</b><strong>Ébénisterie de l’Hermitage inc.</strong><p>68, chemin des guides<br>Ripon (Qc) J0V 1V0<br>(819) 428-7690</p></div></div>
         <table class="paper-table"><thead><tr><th>${en ? 'Description' : 'Description'}</th><th>${en ? 'Qty' : 'Qté'}</th><th>${en ? 'Unit price' : 'Prix unitaire'}</th><th>${en ? 'Amount' : 'Montant'}</th></tr></thead><tbody id="previewRows"></tbody></table>
-        <div class="doc1-closing"><div class="doc1-note" data-notes-block ${view.notes?.trim() ? '' : 'hidden'}><b>${en ? 'Note to client' : 'Note pour le client'}</b><p data-preview="notes">${esc(view.notes || '')}</p></div>${totals}</div>
+        <div class="doc1-closing"><div class="doc1-extras"><div class="doc1-note" data-notes-block ${view.notes?.trim() ? '' : 'hidden'}><b>${en ? 'Note to client' : 'Note pour le client'}</b><p data-preview="notes">${esc(view.notes || '')}</p></div><div class="doc1-payments" data-payment-breakdown ${hasDeposit ? '' : 'hidden'}>${paymentBreakdown()}</div></div>${totals}</div>
         <div class="doc1-footer">${footerIds}</div></div><p class="preview-caption">${en ? 'English customer copy' : 'Aperçu du document'} · format Lettre</p>`;
     }
     function pdfIssues() {
@@ -300,8 +324,7 @@
         const price = Number(rawPrice.replace(',', '.'));
         if (!/^(?:\d+(?:[.,]\d*)?|[.,]\d+)$/.test(rawPrice) || !Number.isFinite(price) || price < 0) add(`[data-item="${index}"][data-key="price"]`, `Prix unitaire de la ligne ${index + 1}`);
       }
-      const rawDeposit = String(state.deposit ?? '').trim();
-      if (rawDeposit && (!/^(?:\d+(?:[.,]\d*)?|[.,]\d+)$/.test(rawDeposit) || !Number.isFinite(Number(rawDeposit.replace(',', '.'))))) add('[data-field="deposit"]', 'Dépôt');
+      for (const issue of paymentIssues(state)) add(issue.field === 'date' ? `[data-calendar="payment-${issue.index}"]` : `[data-payment="${issue.index}"]`, issue.message);
       return issues;
     }
     function paintValidation() {
@@ -311,7 +334,7 @@
         panel.hidden = !issues.length;
         panel.innerHTML = issues.length ? `<strong>À compléter avant de continuer</strong><ul>${issues.map(issue => `<li>${esc(issue.label)}</li>`).join('')}</ul>` : '';
       }
-      document.querySelectorAll('input[aria-invalid="true"], textarea[aria-invalid="true"]').forEach(field => field.removeAttribute('aria-invalid'));
+      document.querySelectorAll('[aria-invalid="true"]').forEach(field => field.removeAttribute('aria-invalid'));
       issues.forEach(issue => document.querySelector(issue.selector)?.setAttribute('aria-invalid', 'true'));
       return issues;
     }
@@ -450,7 +473,7 @@
             <div id="lines">${state.items.map(row).join('')}</div>
             <button type="button" class="add-button" data-add>+ Ajouter une ligne</button>
             <div class="optional-fields"><h4>Au besoin</h4><div class="fields">
-              ${input('deposit',state.kind === 'facture' ? 'Dépôt reçu ($) <span class="optional">(facultatif)</span>' : 'Dépôt demandé ($) <span class="optional">(facultatif)</span>','Laissez vide si aucun dépôt','text','span2')}
+              ${paymentsControl()}
               ${textArea('notes','Note pour le client <span class="optional">(facultatif)</span>','Ajoutez plusieurs lignes si nécessaire','span2',1)}
             </div>
             </div>
@@ -477,6 +500,7 @@
       document.querySelectorAll('[data-phone-block]').forEach(el => { el.hidden = !state.contact?.trim(); });
       document.querySelectorAll('[data-email-block]').forEach(el => { el.hidden = !state.email?.trim(); });
       document.querySelectorAll('[data-notes-block]').forEach(el => { el.hidden = !view.notes?.trim(); });
+      document.querySelectorAll('[data-payment-breakdown]').forEach(el => { el.hidden = deposit() <= 0; el.innerHTML = paymentBreakdown(); });
       const previewFallback = { client:englishMode ? 'Client name' : 'Nom du client', shipTo:'', address:englishMode ? 'Billing address' : 'Adresse de facturation', date:'Date', validUntil:englishMode ? 'Valid until' : 'Date de validité', dueDate:englishMode ? 'None' : 'Aucune', invoiceNumber:state.invoiceNumber ?? '—', contact:'', email:'', project:englishMode ? 'Project name' : 'Nom du projet', notes:'' };
       for (const field of Object.keys(previewFallback)) document.querySelectorAll(`[data-preview="${field}"]`).forEach(el => el.textContent = ['date','validUntil','dueDate'].includes(field) ? displayDate(state[field]) || previewFallback[field] : view[field] || previewFallback[field]);
       const rows = view.items.filter(i => i.description?.trim() || String(i.price || '').trim()).map(i => `<tr><td>${esc(i.description || '—')}</td><td>${esc(i.quantity || '—')}</td><td>${money(value(i.price))}</td><td>${money(value(i.quantity) * value(i.price))}</td></tr>`).join('');
@@ -1196,6 +1220,24 @@
         markDirty(); void saveNow();
         return;
       }
+      if (b.hasAttribute('data-add-payment')) {
+        if (state.payments.length >= 500) { notice('Maximum de 500 paiements par document.'); return; }
+        rememberUndo(); calendarField = null; calendarView = null;
+        state.payments.push({ amount: '', date: '' });
+        render(); markDirty(); void saveNow();
+        document.querySelector(`[data-payment="${state.payments.length - 1}"]`)?.focus();
+        return;
+      }
+      if (b.dataset.removePayment !== undefined) {
+        rememberUndo(); calendarField = null; calendarView = null;
+        const index = Number(b.dataset.removePayment);
+        state.payments.splice(index, 1);
+        if (!state.payments.length) state.payments.push({ amount: '', date: '' });
+        state.deposit = deposit() > 0 ? deposit().toFixed(2) : '';
+        render(); markDirty(); void saveNow();
+        document.querySelector(`[data-payment="${Math.min(index, state.payments.length - 1)}"]`)?.focus();
+        return;
+      }
       if (b.hasAttribute('data-add')) {
         lineAssist = null;
         rememberUndo();
@@ -1251,6 +1293,12 @@
         state[el.dataset.field] = el.value;
         releaseVoiceField(voiceSession, el.dataset.field);
         releaseVoiceField(voiceRecovery?.session, el.dataset.field);
+      } else if (el.dataset.payment !== undefined) {
+        const index = Number(el.dataset.payment);
+        if (!state.payments[index]) return;
+        rememberUndo(`${state.id}:payment:${index}`);
+        state.payments[index].amount = el.value;
+        state.deposit = deposit() > 0 ? deposit().toFixed(2) : '';
       } else if (el.dataset.item !== undefined) {
         const index = Number(el.dataset.item);
         if (!state.items[index]) return;
@@ -1297,7 +1345,7 @@
       document.querySelectorAll(`[data-calendar="${field}"], [data-date-display="${field}"]`).forEach(el => el.setAttribute('aria-expanded', 'false'));
     });
     document.addEventListener('focusout', event => {
-      if (event.target.dataset.field || event.target.dataset.item !== undefined) {
+      if (event.target.dataset.field || event.target.dataset.item !== undefined || event.target.dataset.payment !== undefined) {
         undoGroup = null;
         void saveNow();
       }

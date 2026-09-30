@@ -39,6 +39,8 @@ $notes = if ($version -eq '0.1.0') {
     'Draft save status is now shown inside the Save Draft button: a pending dot, a small spinner while saving, a check after confirmation, or an error mark. Hover to see that drafts save automatically on this PC and the time of the last confirmed save. The existing invoice number and English-copy panels are unchanged while compact design options are reviewed.'
 } elseif ($version -eq '0.1.10') {
     'The approved compact number and language panels now sit side by side in one row. Invoice number editing stays inside its card; reused numbers still require confirmation. The full-card Francais/English switch translates on selection and shows the English customer preview. Creating or printing the English PDF confirms that copy, and later French text changes require a refreshed translation. Manual French documents remain available without AI.'
+} elseif ($version -eq '0.1.11') {
+    'Add multiple deposits or received payments with an amount and optional date on each row. The approved compact date chooser uses larger text, and Add a payment stays below the rows. French and English customer PDFs list every payment and date, the combined amount, and the remaining balance. Existing single deposits are preserved as undated rows, including earlier drafts and recoverable versions. Invoice numbering and the selected PDF folder are unchanged.'
 } else { "Windows release $tag. Signed update package for existing installations." }
 $body = @{ tag_name = $tag; target_commitish = 'main'; name = "Soumissions et factures $tag"; body = $notes; draft = $true; prerelease = $false } | ConvertTo-Json -Compress
 $release = Invoke-RestMethod -Method Post -Uri "$api/releases" -Headers $headers -ContentType 'application/json' -Body $body

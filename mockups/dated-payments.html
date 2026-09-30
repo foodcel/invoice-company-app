@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dépôts datés · Trois maquettes</title>
+  <style>
+    :root { font-family: "Segoe UI", Aptos, Arial, sans-serif; color-scheme: light; --bg:#f6f2eb; --panel:#fff; --surface:#fffdfa; --ink:#23302c; --muted:#64726d; --border:#d9ded8; --accent:#226b5b; --soft:#e9f3ec; --on-accent:#fff; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); }
+    body.dark { color-scheme:dark; --bg:#17201e; --panel:#24322e; --surface:#202b29; --ink:#f0f5f1; --muted:#b4c2ba; --border:#41544b; --accent:#97d7b8; --soft:#314b3b; --on-accent:#173025; }
+    button,input,select,textarea { font:inherit; }
+    button { cursor:pointer; transition:background .16s,box-shadow .16s,border-color .16s,transform .16s; }
+    button:active { transform:translateY(1px); }
+    button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible { outline:none; box-shadow:inset 0 0 0 2px #448ad7; }
+    button:hover { box-shadow:inset 0 0 0 2px #42a87538; }
+    button svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+    main { max-width:1530px; margin:auto; padding:32px 24px 60px; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+    .eyebrow { margin:0 0 7px; color:var(--accent); font-size:12px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
+    h1 { margin:0; font-size:clamp(26px,3vw,36px); letter-spacing:-.035em; }
+    .intro { max-width:900px; color:var(--muted); font-size:14px; line-height:1.6; margin:12px 0 25px; }
+    .theme { border:1px solid var(--border); border-radius:10px; background:var(--panel); color:var(--ink); padding:10px 14px; white-space:nowrap; }
+    .options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; align-items:start; }
+    .option { min-width:0; padding:22px; background:var(--panel); border:1px solid var(--border); border-radius:18px; box-shadow:0 12px 40px #2a393212; }
+    .option-head { display:flex; gap:10px; align-items:center; }
+    .option-no { display:grid; place-items:center; width:33px; height:33px; border-radius:9px; background:var(--soft); color:var(--accent); font-weight:800; flex:none; }
+    h2 { margin:0; font-size:19px; letter-spacing:-.02em; }
+    .option-copy { min-height:52px; margin:10px 0 22px; color:var(--muted); font-size:13px; line-height:1.5; }
+    .form-section { padding-top:18px; border-top:1px solid var(--border); }
+    h3 { font-size:14px; margin:0 0 13px; }
+    .field-label { display:block; font-size:12px; font-weight:650; color:var(--muted); margin-bottom:7px; }
+    .optional { font-size:11px; font-weight:400; }
+    .payments { display:grid; gap:9px; }
+    .payment { position:relative; display:flex; align-items:center; gap:7px; min-width:0; }
+    .payment-shell { display:flex; align-items:stretch; min-width:0; flex:1; height:47px; background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .payment-shell:hover { border-color:var(--accent); box-shadow:inset 0 0 0 2px #42a87524; }
+    .payment-shell:focus-within { border-color:var(--accent); box-shadow:inset 0 0 0 3px #42a87538; }
+    .amount { display:flex; align-items:center; flex:1; min-width:0; padding-right:10px; }
+    .amount input { width:100%; min-width:0; height:100%; padding:10px 11px; border:0; background:transparent; color:var(--ink); font-size:15px; box-shadow:none; }
+    .amount input::placeholder { color:var(--muted); opacity:.7; }
+    .currency { color:var(--muted); font-size:13px; }
+    .date-button { display:flex; align-items:center; justify-content:center; gap:8px; flex:none; width:164px; padding:0 9px; border:0; border-left:1px solid var(--border); background:var(--soft); color:var(--accent); font-size:12px; white-space:nowrap; }
+    .date-button:hover,.date-button[aria-expanded=true] { background:var(--accent); color:var(--on-accent); }
+    .remove { display:grid; place-items:center; width:38px; height:38px; padding:0; flex:none; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--muted); }
+    .remove:hover { background:#fff1ef; border-color:#e6aba6; color:#b42318; box-shadow:inset 0 0 0 2px #f6c5c0; }
+    .dark .remove:hover { background:#5b2828; color:#ffb7ae; }
+    .variant-1 .date-button { width:176px; font-size:14px; font-weight:600; }
+    .variant-2 .date-button { width:130px; gap:6px; font-weight:600; }
+    .variant-3 .date-button { width:115px; gap:8px; }
+    .variant-3 .date-text { display:flex; flex-direction:column; align-items:flex-start; gap:1px; }
+    .variant-3 .date-text small { opacity:.8; font-size:9px; line-height:1; }
+    .variant-3 .date-text strong { font-size:11px; line-height:1.2; font-weight:650; }
+    .add { display:block; width:100%; min-height:48px; margin-top:11px; padding:9px 12px; border:1px dashed var(--accent); border-radius:9px; background:var(--soft); color:var(--accent); font-weight:800; font-size:14px; text-align:left; }
+    .add:hover { background:var(--panel); box-shadow:inset 0 0 0 2px var(--accent); transform:translateY(-1px); }
+    .payment-total { display:flex; justify-content:space-between; gap:10px; align-items:center; margin:13px 0 21px; color:var(--muted); font-size:12px; }
+    .payment-total strong { color:var(--ink); font-size:14px; }
+    .notes { width:100%; min-height:45px; padding:10px 12px; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--ink); resize:none; font-size:14px; line-height:1.5; }
+    .notes::placeholder { color:var(--muted); opacity:.7; }
+    .paper-sample { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; margin-top:22px; }
+    .paper-kicker { color:var(--muted); font-size:10px; font-weight:750; text-transform:uppercase; letter-spacing:.07em; margin:0 0 12px; }
+    .paper-row { display:flex; justify-content:space-between; gap:12px; font-size:12px; margin-top:8px; }
+    .paper-row span:last-child { white-space:nowrap; }
+    .paper-payments { margin:12px 0; padding:10px 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+    .paper-payments .paper-row { color:var(--muted); font-size:11px; }
+    .paper-balance { font-weight:800; color:var(--accent); font-size:15px; }
+    .calendar { position:absolute; top:calc(100% + 7px); right:45px; width:min(292px,calc(100vw - 62px)); padding:13px; z-index:30; background:var(--panel); color:var(--ink); border:1px solid var(--border); border-radius:14px; box-shadow:0 18px 40px #15251f33; }
+    .calendar-head { display:flex; align-items:center; gap:5px; margin-bottom:12px; }
+    .calendar-head button { width:30px; height:32px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--ink); flex:none; }
+    .calendar-head select { min-width:0; flex:1; height:32px; padding:0 4px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--ink); font-size:12px; }
+    .calendar-head .year { flex:0 0 65px; }
+    .weekdays,.days { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; text-align:center; }
+    .weekdays { color:var(--muted); font-size:10px; margin-bottom:6px; }
+    .days button { height:31px; border:0; border-radius:7px; background:transparent; color:var(--ink); font-size:12px; }
+    .days button:hover { background:var(--soft); }
+    .days button.selected { background:var(--accent); color:var(--on-accent); font-weight:750; }
+    .calendar-foot { display:flex; justify-content:space-between; gap:8px; padding-top:11px; margin-top:10px; border-top:1px solid var(--border); }
+    .calendar-foot button { border:1px solid var(--border); background:var(--surface); color:var(--ink); border-radius:7px; padding:7px 9px; font-size:11px; }
+    .under-note { margin:22px 0 0; color:var(--muted); font-size:13px; line-height:1.6; }
+    @media(max-width:1250px) { .options { grid-template-columns:1fr; max-width:650px; margin:auto; } .option-copy { min-height:0; } }
+    @media(max-width:500px) { main { padding:22px 12px 40px; } .option { padding:17px; } header { align-items:flex-start; } .theme { padding:8px; font-size:12px; } .date-button { width:145px; } .variant-1 .date-button { width:166px; } .variant-2 .date-button { width:124px; } .remove { width:34px; height:34px; } }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+<main>
+  <header><div><p class="eyebrow">Maquettes à choisir</p><h1>Plusieurs dépôts, chacun avec sa date</h1></div><button class="theme" id="theme">Mode sombre</button></header>
+  <p class="intro">Le montant reste à gauche. Le calendrier est intégré dans la partie séparée à droite. Essayez les dates, les montants et « Ajouter un dépôt ». Ces exemples ne modifient pas l’application installée.</p>
+  <div class="options" id="options"></div>
+  <p class="under-note">Exemples de paiements reçus sur une facture. Chaque nouvelle ligne apparaît juste au-dessus du bouton d’ajout et commence vide. Le PDF présentera chaque paiement avec sa date, puis le total reçu et le solde à payer.</p>
+</main>
+<script>
+  const icons={calendar:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14h2M14 14h2M8 17h2"/></svg>',x:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>'};
+  const variants=[{title:'Date lisible',copy:'Le plus proche de votre dessin : le montant et une date bien visible dans la même case.'},{title:'Date compacte',copy:'La même idée, avec une date courte pour laisser plus de place au montant.'},{title:'Calendrier discret',copy:'Une petite zone datée, avec le libellé « Reçu le » intégré dans le bouton.'}];
+  const models=variants.map(()=>[{id:1,amount:'4000',date:'2026-09-18'},{id:2,amount:'1500',date:'2026-09-25'}]);
+  const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const money=n=>new Intl.NumberFormat('fr-CA',{style:'currency',currency:'CAD'}).format(n);
+  const parseDate=s=>s?new Date(s+'T12:00:00'):null;
+  const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const amount=row=>{const n=Number(row.amount.replace(/\s/g,'').replace(',','.'));return Number.isFinite(n)&&n>0?Math.round(n*100)/100:0;};
+  const fullDate=s=>s?new Intl.DateTimeFormat('fr-CA',{day:'numeric',month:'short',year:'numeric'}).format(parseDate(s)):'Choisir une date';
+  const shortDate=s=>s?s.split('-').reverse().join('/'):'Date';
+  let nextId=3,openCalendar=null;
+  function dateText(v,s){return v===0?`<span>${fullDate(s)}</span>${icons.calendar}`:v===1?`<span>${shortDate(s)}</span>${icons.calendar}`:`${icons.calendar}<span class="date-text"><small>Reçu le</small><strong>${s?shortDate(s):'Choisir la date'}</strong></span>`;}
+  function paymentRow(v,row,index){return `<div class="payment" data-row="${row.id}"><div class="payment-shell"><div class="amount"><input data-amount="${row.id}" inputmode="decimal" aria-label="Montant du dépôt ${index+1}" placeholder="Montant" value="${esc(row.amount)}"><span class="currency">$</span></div><button class="date-button" data-date="${row.id}" aria-label="Date du dépôt ${index+1} : ${fullDate(row.date)}" aria-expanded="false">${dateText(v,row.date)}</button></div><button class="remove" data-remove="${row.id}" aria-label="Supprimer le dépôt ${index+1}" title="Supprimer ce dépôt">${icons.x}</button></div>`;}
+  function render(v){const el=document.querySelector(`[data-variant="${v}"]`);el.querySelector('.payments').innerHTML=models[v].map((r,i)=>paymentRow(v,r,i)).join('');updateTotals(v);}
+  function updateTotals(v){const el=document.querySelector(`[data-variant="${v}"]`),total=models[v].reduce((s,r)=>s+amount(r),0);el.querySelector('[data-total]').textContent=money(total);el.querySelector('[data-balance]').textContent=money(Math.max(0,12000-total));el.querySelector('[data-pdf-total]').textContent=money(total);el.querySelector('[data-pdf-payments]').innerHTML=models[v].filter(r=>amount(r)>0).map(r=>`<div class="paper-row"><span>Paiement reçu${r.date?' · '+fullDate(r.date):''}</span><span>${money(amount(r))}</span></div>`).join('')||'<div class="paper-row"><span>Aucun paiement reçu</span></div>';}
+  document.getElementById('options').innerHTML=variants.map((v,i)=>`<section class="option variant-${i+1}" data-variant="${i}"><div class="option-head"><span class="option-no">${i+1}</span><h2>${v.title}</h2></div><p class="option-copy">${v.copy}</p><div class="form-section"><h3>Au besoin</h3><span class="field-label">Dépôts et paiements reçus ($) <span class="optional">(facultatif)</span></span><div class="payments"></div><button class="add" data-add>＋ Ajouter un dépôt</button><div class="payment-total"><span>Total reçu</span><strong data-total></strong></div><label class="field-label" for="notes-${i}">Note pour le client <span class="optional">(facultatif)</span></label><textarea id="notes-${i}" class="notes" rows="1" placeholder="Une précision à ajouter…"></textarea></div><div class="paper-sample"><p class="paper-kicker">Extrait du PDF · exemple</p><div class="paper-row"><span>Total avec taxes</span><strong>12 000,00 $</strong></div><div class="paper-payments"><div data-pdf-payments></div><div class="paper-row"><strong>Total reçu</strong><strong data-pdf-total></strong></div></div><div class="paper-row paper-balance"><span>Solde à payer</span><span data-balance></span></div></div></section>`).join('');
+  variants.forEach((_,v)=>render(v));
+  function closeCalendar(restore=false){const previous=openCalendar;document.querySelector('.calendar')?.remove();document.querySelectorAll('.date-button').forEach(b=>b.setAttribute('aria-expanded','false'));openCalendar=null;if(restore&&previous)document.querySelector(`[data-variant="${previous.v}"] [data-date="${previous.id}"]`)?.focus();}
+  function calendarHtml(){const {v,id,month,year}=openCalendar,row=models[v].find(r=>r.id===id),offset=(new Date(year,month,1).getDay()+6)%7,count=new Date(year,month+1,0).getDate(),monthNames=Array.from({length:12},(_,m)=>new Intl.DateTimeFormat('fr-CA',{month:'long'}).format(new Date(2026,m,1)));return `<div class="calendar" role="dialog" aria-label="Date du paiement"><div class="calendar-head"><button data-month-step="-1" aria-label="Mois précédent">‹</button><select data-month aria-label="Mois">${monthNames.map((name,m)=>`<option value="${m}" ${m===month?'selected':''}>${name}</option>`).join('')}</select><select class="year" data-year aria-label="Année">${Array.from({length:16},(_,i)=>year-7+i).map(y=>`<option ${y===year?'selected':''}>${y}</option>`).join('')}</select><button data-month-step="1" aria-label="Mois suivant">›</button></div><div class="weekdays">${['L','M','M','J','V','S','D'].map(s=>`<span>${s}</span>`).join('')}</div><div class="days">${'<span></span>'.repeat(offset)}${Array.from({length:count},(_,i)=>{const value=iso(new Date(year,month,i+1));return `<button data-day="${value}" class="${row.date===value?'selected':''}" aria-label="${fullDate(value)}">${i+1}</button>`;}).join('')}</div><div class="calendar-foot"><button data-today>Aujourd’hui</button><button data-clear-date>Effacer la date</button></div></div>`;}
+  function paintCalendar(){const {v,id}=openCalendar;document.querySelector('.calendar')?.remove();const row=document.querySelector(`[data-variant="${v}"] [data-row="${id}"]`);row.insertAdjacentHTML('beforeend',calendarHtml());row.querySelector('.date-button').setAttribute('aria-expanded','true');}
+  function chooseDate(s){const {v,id}=openCalendar;models[v].find(r=>r.id===id).date=s;closeCalendar();render(v);document.querySelector(`[data-variant="${v}"] [data-date="${id}"]`)?.focus();}
+  document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b){if(!e.target.closest('.calendar'))closeCalendar();return;}if(b.id==='theme'){document.body.classList.toggle('dark');b.textContent=document.body.classList.contains('dark')?'Mode clair':'Mode sombre';return;}const section=b.closest('[data-variant]');if(!section){closeCalendar();return;}const v=Number(section.dataset.variant);
+    if(b.hasAttribute('data-date')){const id=Number(b.dataset.date),same=openCalendar?.v===v&&openCalendar?.id===id;closeCalendar();if(same)return;const d=parseDate(models[v].find(r=>r.id===id).date)||new Date();openCalendar={v,id,month:d.getMonth(),year:d.getFullYear()};paintCalendar();section.querySelector('.calendar select')?.focus();return;}
+    if(b.hasAttribute('data-add')){closeCalendar();const id=nextId++;models[v].push({id,amount:'',date:''});render(v);section.querySelector(`[data-amount="${id}"]`)?.focus();return;}
+    if(b.hasAttribute('data-remove')){closeCalendar();models[v]=models[v].filter(r=>r.id!==Number(b.dataset.remove));render(v);section.querySelector('[data-add]')?.focus();return;}
+    if(b.dataset.day){chooseDate(b.dataset.day);return;}if(b.hasAttribute('data-clear-date')){chooseDate('');return;}if(b.hasAttribute('data-today')){chooseDate(iso(new Date()));return;}
+    if(b.dataset.monthStep){const d=new Date(openCalendar.year,openCalendar.month+Number(b.dataset.monthStep),1);openCalendar.month=d.getMonth();openCalendar.year=d.getFullYear();paintCalendar();return;}if(!b.closest('.calendar'))closeCalendar();
+  });
+  document.addEventListener('input',e=>{const el=e.target,section=el.closest('[data-variant]');if(el.dataset.amount){const v=Number(section.dataset.variant);models[v].find(r=>r.id===Number(el.dataset.amount)).amount=el.value;updateTotals(v);}if(el.matches('.notes')){el.style.height='auto';el.style.height=Math.max(45,el.scrollHeight+2)+'px';}});
+  document.addEventListener('change',e=>{if(!openCalendar)return;if(e.target.hasAttribute('data-month')){openCalendar.month=Number(e.target.value);paintCalendar();}if(e.target.hasAttribute('data-year')){openCalendar.year=Number(e.target.value);paintCalendar();}});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&openCalendar){e.preventDefault();closeCalendar(true);}});
+</script>
+</body>
+</html>
