@@ -3,6 +3,8 @@
     import { relaunch } from '@tauri-apps/plugin-process';
     import { open as pickFolder } from '@tauri-apps/plugin-dialog';
     import { createPdf } from './pdf.js';
+    import { openEmailComposer, openMailSettings } from './email-composer.js';
+    import './email-composer.css';
     import { paymentRows, paymentTotal, paymentIssues } from './payments.js';
     import { startStreamingRecognition } from './voice-capture.js';
     import { createVoiceSession, releaseVoiceField, releaseVoiceItem, applyVoiceUpdate } from './voice-workflow.js';
@@ -26,6 +28,7 @@
     let savedRevision = 0;
     let commandQueue = Promise.resolve();
     let busy = false;
+    let mailOpen = false;
     let undoStack = [];
     let undoGroup = null;
     let records = [];
@@ -262,10 +265,10 @@
     }
     function paymentsControl() {
       const invoice = state.kind === 'facture';
-      return `<div class="span2 payment-fields"><span class="payment-label">${invoice ? 'Dépôts et paiements reçus ($)' : 'Dépôts demandés ($)'} <span class="optional">(facultatif)</span></span><div class="payment-list">${state.payments.map((payment, index) => {
+      return `<div class="span2 payment-fields payment-card"><div class="payment-card-head"><strong>${invoice ? 'Dépôts et paiements reçus' : 'Dépôts demandés'}</strong><span class="optional">(facultatif)</span></div><div class="payment-card-body"><div class="payment-list">${state.payments.map((payment, index) => {
         const field = `payment-${index}`, open = calendarField === field;
         return `<div class="payment-entry date-wrap" data-date-wrap="${field}"><div class="payment-shell"><div class="payment-amount"><input data-payment="${index}" aria-label="Montant du paiement ${index + 1}" inputmode="decimal" value="${esc(payment.amount)}" placeholder="Montant"><span>$</span></div><button type="button" class="payment-date" data-calendar="${field}" aria-label="Choisir ${dateName(field)}${payment.date ? ' : ' + esc(paymentDate(payment.date)) : ''}" title="Choisir la date" aria-haspopup="dialog" aria-expanded="${open}"><span>${esc(paymentDate(payment.date) || 'Choisir une date')}</span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M8 14h2M14 14h2M8 18h2"/></svg></button></div><button type="button" class="payment-remove" data-remove-payment="${index}" aria-label="Retirer le paiement ${index + 1}" title="Retirer ce paiement"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5 19 19M19 5 5 19"/></svg></button>${open ? calendarPopover(field) : ''}</div>`;
-      }).join('')}</div><button type="button" class="add-button" data-add-payment>+ Ajouter ${invoice ? 'un paiement' : 'un dépôt'}</button><div class="payment-total"><span>${invoice ? 'Total reçu' : 'Total des dépôts'}</span><strong data-preview="deposit">${money(deposit())}</strong></div></div>`;
+      }).join('')}</div><button type="button" class="add-button" data-add-payment>+ Ajouter ${invoice ? 'un paiement' : 'un dépôt'}</button><div class="payment-total"><span>${invoice ? 'Total reçu' : 'Total des dépôts'}</span><strong data-preview="deposit">${money(deposit())}</strong></div></div></div>`;
     }
     function paymentBreakdown() {
       const en = englishMode, invoice = state.kind === 'facture';
@@ -298,7 +301,7 @@
         <div><span>${en ? 'QST (9.975%)' : 'TVQ (9,975 %)'}</span><span data-preview="tvq">${money(tvq())}</span></div>
         <div class="grand"><span>${en ? 'Total including taxes' : 'Total avec taxes'}</span><span data-preview="gross">${money(gross())}</span></div>
         <div data-deposit-row ${hasDeposit ? '' : 'hidden'}><span>${en ? (invoice ? 'Total received' : 'Total deposits') : (invoice ? 'Total reçu' : 'Total des dépôts')}</span><span data-preview="deposit">${money(deposit())}</span></div>
-        <div class="balance" data-deposit-row ${hasDeposit ? '' : 'hidden'}><span>${en ? (invoice ? 'Balance due' : 'Balance after deposit') : (invoice ? 'Solde à payer' : 'Solde après dépôt')}</span><span data-preview="balance">${money(balance())}</span></div>
+        <div class="balance" data-deposit-row ${hasDeposit ? '' : 'hidden'}><span>${en ? (invoice ? 'Balance due' : 'Balance after deposit') : 'Balance'}</span><span data-preview="balance">${money(balance())}</span></div>
       </div>`;
       return `<div class="paper doc1">
         <div class="paper-top"><div class="paper-logo"><div class="paper-mark" aria-hidden="true"><img src="${businessCardImage}" alt="" width="374" height="339"></div><div class="paper-name"><strong>ÉBÉNISTERIE</strong><small>DE L'HERMITAGE INC.</small></div></div><div class="paper-type">${en ? (invoice ? 'Invoice' : 'Quote') : kindTitle()}${number}</div></div>
@@ -472,7 +475,7 @@
         return;
       }
       app.className = `app v1 ${theme === 'dark' ? 'dark' : ''}`;
-      app.innerHTML = `<header class="app-top"><div class="brand"><div class="brand-mark" aria-hidden="true"></div><span>Ébénisterie de l'Hermitage inc.<small>Soumissions et factures</small></span></div><button type="button" class="plain-button folder-tool" data-folder title="Changer le dossier des PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3z"/></svg>Dossier des PDF</button><div class="top-tools"><button type="button" class="plain-button" data-ai-settings>Réglages IA</button><button type="button" class="plain-button" data-recent>Documents récents</button><button type="button" class="plain-button" data-check-update>Vérifier les mises à jour</button><button type="button" class="theme-button" data-theme>${theme === 'dark' ? '☀ Mode clair' : '☾ Mode sombre'}</button></div></header>
+      app.innerHTML = `<header class="app-top"><div class="brand"><div class="brand-mark" aria-hidden="true"></div><span>Ébénisterie de l'Hermitage inc.<small>Soumissions et factures</small></span></div><button type="button" class="plain-button folder-tool" data-folder title="Changer le dossier des PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3z"/></svg>Dossier des PDF</button><div class="top-tools"><button type="button" class="plain-button" data-mail-settings>Courriel Outlook</button><button type="button" class="plain-button" data-ai-settings>Réglages IA</button><button type="button" class="plain-button" data-recent>Documents récents</button><button type="button" class="plain-button" data-check-update>Vérifier les mises à jour</button><button type="button" class="theme-button" data-theme>${theme === 'dark' ? '☀ Mode clair' : '☾ Mode sombre'}</button></div></header>
         <div class="welcome"><p class="eyebrow">${design.title}</p><h2>Que voulez-vous préparer aujourd'hui&nbsp;?</h2><p>${design.subtitle}</p></div>
         <div class="choice-row"><button type="button" class="choice ${state.kind === 'soumission' ? 'active' : ''}" data-kind="soumission" aria-pressed="${state.kind === 'soumission'}"><span class="choice-icon">S</span><span><strong>Soumission</strong><small>Préparer un prix pour un client</small></span></button><button type="button" class="choice ${state.kind === 'facture' ? 'active' : ''}" data-kind="facture" aria-pressed="${state.kind === 'facture'}"><span class="choice-icon">F</span><span><strong>Facture</strong><small>Facturer un travail ou un produit</small></span></button></div>
         <div class="workbench">
@@ -502,9 +505,13 @@
             ${invoiceNumberControl()}
             ${languageControls()}
           </div>
-          <div class="actions"><button type="button" class="primary" data-pdf>Créer le PDF</button><button type="button" class="print-button" data-print>Imprimer</button></div><p class="output-status" role="status" aria-live="polite">${esc(outputStatus)}</p>
+          <div class="actions email-output-actions">
+            <button type="button" class="primary" data-pdf><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg><span>Créer le PDF</span></button>
+            <button type="button" class="print-button" data-print><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6Z"/><path d="M18 12h.01"/></svg><span>Imprimer</span></button>
+            <button type="button" class="print-button" data-send-email><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9L2 9Z"/><path d="m22 2-11 11"/></svg><span>Envoyer</span></button>
+          </div><p class="output-status" role="status" aria-live="polite">${esc(outputStatus)}</p>
         </section><aside class="preview">${preview()}</aside></div>${recentDialog()}${updateDialog()}${folderDialog()}${aiSettingsDialog()}`;
-      app.querySelectorAll('.app-top, .welcome, .choice-row, .workbench').forEach(el => { el.inert = recentOpen || updateOpen || folderOpen || settingsOpen; });
+      app.querySelectorAll('.app-top, .welcome, .choice-row, .workbench').forEach(el => { el.inert = mailOpen || recentOpen || updateOpen || folderOpen || settingsOpen; });
       sync();
       fitTextareas(app);
       paintValidation();
@@ -548,7 +555,7 @@
       busy = active;
       const workbench = document.querySelector('.workbench');
       if (workbench) {
-        workbench.inert = active || recentOpen || updateOpen || folderOpen || settingsOpen;
+        workbench.inert = active || mailOpen || recentOpen || updateOpen || folderOpen || settingsOpen;
         workbench.setAttribute('aria-busy', String(active));
       }
     }
@@ -581,8 +588,11 @@
         setBusy(false);
       }
     }
-    async function exportDocument(printAfter = false) {
-      if (busy || !readyForOutput()) return;
+    async function exportDocument(printAfter = false, forEmail = false) {
+      if (busy || !readyForOutput()) {
+        if (forEmail) throw new Error('Le document n’est pas prêt pour créer sa pièce jointe.');
+        return;
+      }
       const alreadyExported = Boolean(records.find(record => record.id === state.id)?.exports?.length);
       if (printAfter) {
         const numberMessage = state.kind === 'facture' && !state.issuedNumber
@@ -590,7 +600,7 @@
           : '';
         const copyMessage = alreadyExported ? ' Une copie précédente sera conservée.' : '';
         if (!confirm(`Avant d'imprimer, l'application enregistrera ${alreadyExported ? 'une nouvelle copie du PDF' : 'le PDF'} dans :\n${pdfDirectory}.${numberMessage}${copyMessage} Continuer ?`)) return;
-      } else if (alreadyExported && !confirm('Ce document a déjà été enregistré en PDF. Créer une autre copie avec le même numéro de facture, si applicable ? Le fichier précédent sera conservé.')) {
+      } else if (!forEmail && alreadyExported && !confirm('Ce document a déjà été enregistré en PDF. Créer une autre copie avec le même numéro de facture, si applicable ? Le fichier précédent sera conservé.')) {
         return;
       }
       setBusy(true);
@@ -632,11 +642,49 @@
           await new Promise(resolve => requestAnimationFrame(resolve));
           window.print();
         }
+        return { path: result.path, filename: result.filename, draftId: result.snapshot.id };
       } catch (error) {
+        if (forEmail) throw error;
         notice(archivedPath ? `PDF enregistré dans ${archivedPath}, mais impression impossible : ${errorText(error)}` : `Export non confirmé : ${errorText(error)}`);
       } finally {
         setBusy(false);
       }
+    }
+    function finishMail() {
+      mailOpen = false;
+      document.getElementById('app').inert = false;
+      render();
+    }
+    async function showMailSettings() {
+      if (mailOpen || busy) return;
+      mailOpen = true;
+      try { await openMailSettings({ invoke: runCommand, onClose: finishMail }); }
+      catch (error) { finishMail(); notice(`Réglages du courriel indisponibles : ${errorText(error)}`); }
+    }
+    async function composeEmail() {
+      if (mailOpen || busy || !readyForOutput()) return;
+      if (!await flushChanges()) return;
+      const source = copy(state);
+      const language = englishMode ? 'en' : 'fr';
+      const previewSource = copy(customerDraft());
+      mailOpen = true;
+      try {
+        const filename = await runCommand('preview_pdf_filename', { draftId: source.id, language });
+        await openEmailComposer({
+          invoke: runCommand, draft: source, language,
+          filename,
+          previewPdf: () => createPdf(previewSource, { invoiceNumber: source.invoiceNumber, language }),
+          preparePdf: async () => {
+            if (state.id !== source.id) throw new Error('Le document ouvert a changé. Fermez ce courriel et ouvrez-le à nouveau.');
+            const result = await exportDocument(false, true);
+            if (!result) throw new Error('Le PDF n’a pas été enregistré. Aucun courriel n’a été envoyé.');
+            return result;
+          },
+          rewrite: ({ subject, body, language }) => runCommand('ai_rewrite_email', { subject, body, language }),
+          onClose: finishMail,
+          onSent: receipt => { outputStatus = 'PDF enregistré. Courriel accepté par Outlook pour envoi.'; notice(outputStatus); }
+        });
+      } catch (error) { finishMail(); notice(`Courriel indisponible : ${errorText(error)}`); }
     }
     async function loadState() {
       try {
@@ -1059,7 +1107,7 @@
       document.querySelector('.app-top [data-check-update]')?.focus();
     }
     async function checkForUpdate() {
-      if (busy || !state) return;
+      if (busy || !state || mailOpen) return;
       const requestId = ++updateRequestId;
       const previous = availableUpdate;
       availableUpdate = null;
@@ -1145,7 +1193,7 @@
       const b = event.target.closest('button');
       if (!b || b.disabled) return;
       if (b.hasAttribute('data-retry-load')) { await loadState(); return; }
-      if (busy || !state) return;
+      if (busy || !state || mailOpen) return;
       if (b.hasAttribute('data-voice')) { if (voiceSession) await stopDocumentDictation(); else await startDocumentDictation(); return; }
       if (b.dataset.lineDictate !== undefined) {
         const index = Number(b.dataset.lineDictate);
@@ -1158,6 +1206,8 @@
         notice('Terminez la dictée ou la proposition en cours avant cette action.'); return;
       }
       if (b.hasAttribute('data-test-ai')) { await testAiConnection(); return; }
+      if (b.hasAttribute('data-mail-settings')) { await showMailSettings(); return; }
+      if (b.hasAttribute('data-send-email')) { await composeEmail(); return; }
       if (b.hasAttribute('data-ai-settings')) { await openAiSettings(); return; }
       if (b.hasAttribute('data-close-ai-settings')) { closeAiSettings(); return; }
       if (b.hasAttribute('data-start-chatgpt-login')) { await startChatgptLogin(); return; }

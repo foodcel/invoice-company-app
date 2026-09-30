@@ -16,6 +16,7 @@ mod ai;
 mod business_ai;
 mod subscription_ai;
 mod local_asr;
+mod outlook;
 
 type AppResult<T> = Result<T, String>;
 const FIRST_INVOICE_NUMBER: u64 = 2060;
@@ -92,6 +93,8 @@ pub struct ExportEntry {
     pub exported_at: String,
     pub language: String,
     pub invoice_number: Option<u64>,
+    #[serde(default)]
+    pub pdf_sha256: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -664,6 +667,28 @@ impl Repository {
         })
     }
 
+    fn email_attachment(&self, draft_id: &str, requested_path: &str) -> AppResult<(String, Vec<u8>)> {
+        let store = self.load()?;
+        let record = &store.records[store.index(draft_id)?];
+        let export = record.exports.iter().find(|export| export.path == requested_path)
+            .ok_or("Cette pièce jointe ne correspond pas à un PDF enregistré pour ce document.")?;
+        let expected_hash = export.pdf_sha256.as_deref()
+            .ok_or("Créez une nouvelle copie du PDF avant de l’envoyer.")?;
+        let metadata = fs::metadata(&export.path).map_err(|_| "Le PDF enregistré est introuvable.")?;
+        if !metadata.is_file() || metadata.len() >= 3_000_000 {
+            return Err("Le PDF dépasse la limite d’envoi de 3 Mo ou n’est pas un fichier.".into());
+        }
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        fs::File::open(&export.path).map_err(|_| "Le PDF ne peut pas être ouvert.")?
+            .take(3_000_001).read_to_end(&mut bytes).map_err(|_| "Le PDF ne peut pas être lu.")?;
+        if bytes.len() >= 3_000_000 || format!("{:x}", Sha256::digest(&bytes)) != expected_hash {
+            return Err("Le PDF a été modifié depuis son enregistrement. Créez une nouvelle copie avant l’envoi.".into());
+        }
+        validate_pdf(&bytes)?;
+        Ok((export.filename.clone(), bytes))
+    }
+
     fn finalize_pending(&self, store: &mut Store) -> AppResult<()> {
         let pending = store
             .pending_export
@@ -703,6 +728,7 @@ impl Repository {
                 exported_at: pending.exported_at,
                 language: pending.language,
                 invoice_number: pending.invoice_number,
+                pdf_sha256: Some(pending.pdf_sha256),
             });
         }
         store.records[index].updated_at = Utc::now().to_rfc3339();
@@ -1404,6 +1430,52 @@ fn export_pdf(
     })
 }
 
+#[tauri::command]
+fn get_mail_settings() -> AppResult<outlook::MailSettings> { outlook::settings() }
+
+#[tauri::command]
+fn preview_pdf_filename(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<()>>,
+    draft_id: String, language: String) -> AppResult<String> {
+    if language != "fr" && language != "en" { return Err("Langue du PDF invalide.".into()); }
+    with_repo(app, lock, |repo| {
+        let store = repo.load()?;
+        let draft = &store.records[store.index(&draft_id)?].draft;
+        let number = if draft.kind == Kind::Facture {
+            Some(draft.issued_number.or(draft.manual_invoice_number).unwrap_or(store.next_invoice_number))
+        } else { None };
+        let base = base_filename(draft, number, &language)?;
+        available_filename(&repo.selected_output_dir(&store)?, &base)
+    })
+}
+
+#[tauri::command]
+fn save_mail_settings(client_id: String, accountant_email: String, signature: String) -> AppResult<outlook::MailSettings> {
+    outlook::save_settings(client_id, accountant_email, signature)
+}
+
+#[tauri::command]
+async fn start_outlook_login() -> AppResult<outlook::MailSettings> { outlook::start_login().await }
+
+#[tauri::command]
+fn cancel_outlook_login() -> AppResult<outlook::MailSettings> { outlook::cancel_login() }
+
+#[tauri::command]
+async fn disconnect_outlook() -> AppResult<outlook::MailSettings> { outlook::disconnect().await }
+
+#[tauri::command]
+async fn send_outlook_mail(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<()>>,
+    draft_id: String, path: String, request: outlook::SendRequest) -> AppResult<outlook::SendReceipt> {
+    let (filename, bytes) = with_repo(app, lock, |repo| repo.email_attachment(&draft_id, &path))?;
+    outlook::send(request, filename, bytes).await
+}
+
+#[tauri::command]
+async fn ai_rewrite_email(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<()>>,
+    subject: String, body: String, language: String) -> AppResult<ai::EmailText> {
+    let provider = with_repo(app, lock, |repo| Ok(repo.load()?.ai_provider))?;
+    ai::rewrite_email(&provider, &subject, &body, &language).await
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| { if let Some(window) = app.get_webview_window("main") { let _ = window.show(); let _ = window.set_focus(); } }))
@@ -1415,6 +1487,9 @@ pub fn run() {
             let auth_directory = app.path().app_local_data_dir()?.join("subscription-auth");
             fs::create_dir_all(&auth_directory)?;
             subscription_ai::configure(auth_directory);
+            let mail_directory = app.path().app_local_data_dir()?.join("outlook");
+            fs::create_dir_all(&mail_directory)?;
+            outlook::configure(mail_directory);
             Ok(())
         })
         .manage(Mutex::new(()))
@@ -1439,7 +1514,15 @@ pub fn run() {
             start_local_asr,
             ai_rewrite_line,
             ai_extract_document,
-            export_pdf
+            export_pdf,
+            get_mail_settings,
+            preview_pdf_filename,
+            save_mail_settings,
+            start_outlook_login,
+            cancel_outlook_login,
+            disconnect_outlook,
+            send_outlook_mail,
+            ai_rewrite_email
         ])
         .build(tauri::generate_context!())
         .expect("Unable to build the local invoice app")
@@ -1470,6 +1553,30 @@ mod tests {
         draft.items[0].description = "Travail".into();
         draft.items[0].price = "100,00".into();
         draft
+    }
+
+    #[test]
+    fn email_attachment_is_registered_hashed_and_bound_to_document() {
+        let (_temp, repo) = setup();
+        let draft = ready_invoice(&repo);
+        let id = draft.id.clone();
+        let exported = repo.export_pdf(draft, PDF.to_vec(), Some(2060), "fr".into()).unwrap();
+        let (filename, bytes) = repo.email_attachment(&id, &exported.path).unwrap();
+        assert_eq!(filename, exported.filename);
+        assert_eq!(bytes, PDF);
+        let another = repo.new_draft(Kind::Soumission).unwrap().current;
+        assert!(repo.email_attachment(&another.id, &exported.path).is_err());
+        assert!(repo.email_attachment(&id, "C:/Windows/win.ini").is_err());
+        fs::write(&exported.path, b"%PDF-1.4\nchanged\n%%EOF\n").unwrap();
+        assert!(repo.email_attachment(&id, &exported.path).is_err());
+        // Hashing the bytes actually read catches a changed PDF rather than trusting its header.
+        fs::write(&exported.path, PDF).unwrap();
+        assert!(repo.email_attachment(&id, &exported.path).is_ok());
+        let mut store = repo.load().unwrap();
+        let index = store.index(&id).unwrap();
+        store.records[index].exports[0].pdf_sha256 = None;
+        repo.commit(&mut store).unwrap();
+        assert!(repo.email_attachment(&id, &exported.path).is_err());
     }
 
     #[test]

@@ -27,7 +27,7 @@ function controller(aiSettings = settings()) {
   const field = { value: '', focus() {} };
   const context = {
     settingsOpen: false, settingsBusy: false, settingsError: '', settingsSuccess: '', aiSettings,
-    state: {}, busy: false, voiceSession: null, voiceRetryBusy: false, lineAssist: null,
+    state: {}, busy: false, mailOpen: false, voiceSession: null, voiceRetryBusy: false, lineAssist: null,
     renders: 0, confirm: () => true, errorText: error => error.message || String(error),
     render: () => context.renders++, notice: message => notices.push(message),
     runCommand: async (name, args) => { calls.push({ name, args }); return await context.respond(name, args); },

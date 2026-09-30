@@ -164,6 +164,13 @@
     .optional-fields { margin-top: 20px; padding-top: 17px; border-top: 1px solid var(--border); }
     .optional-fields h4 { margin: 0 0 12px; color: var(--ink); font-size: 14px; }
     .payment-fields { grid-column: 1 / -1; min-width: 0; }
+    .payment-card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+    .payment-card-head { display: flex; align-items: baseline; gap: 8px; min-height: 48px; padding: 12px 13px; border-bottom: 1px solid var(--border); border-radius: 11px 11px 0 0; background: var(--soft); }
+    .payment-card-head strong { color: var(--ink); font-size: 14px; }
+    .payment-card-head .optional { font-size: 12px; color: var(--muted); }
+    .payment-card-body { padding: 13px; }
+    .payment-card-body .add-button { min-height: 42px; margin-top: 11px; font-size: 13px; }
+    .payment-card-body .payment-total { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
     .payment-label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 12px; font-weight: 650; }
     .payment-list { display: grid; gap: 9px; }
     .payment-entry { display: flex; align-items: center; gap: 7px; min-width: 0; }
@@ -184,7 +191,7 @@
     .payment-total { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 13px; color: var(--muted); font-size: 12px; }
     .payment-total strong { color: var(--ink); font-size: 14px; }
     .summary-section { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; margin-top: 17px; }
-    .language-panel { min-width: 0; height: 70px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 5px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
+    .language-panel { min-width: 0; height: 44px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
     .language-panel:only-child { grid-column: 1 / -1; }
     .language-panel button { min-width: 0; height: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 14px; font-weight: 750; }
     .language-panel button.active { background: var(--soft); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
@@ -236,6 +243,14 @@
     .v1 .preview { width: 100%; container-type: inline-size; }
     .v1 .actions { display: grid; grid-template-columns: 1fr 1fr; }
     .v1 .actions button { min-height: 50px; width: 100%; }
+    .v1 .actions.email-output-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .email-output-actions button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px; min-width: 0; }
+    .email-output-actions svg { width: 19px; height: 19px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .email-output-actions span { min-width: 0; }
+    @container editor (max-width: 400px) {
+      .email-output-actions button { gap: 5px; padding: 6px; font-size: 12px; }
+      .email-output-actions svg { width: 17px; height: 17px; }
+    }
     .print-button { border: 1px solid var(--accent); border-radius: 10px; background: var(--soft); color: var(--accent); font-weight: 800; }
     .print-button:hover { background: var(--panel); box-shadow: inset 0 0 0 2px #42a87538; transform: translateY(-1px); }
     .v1 .paper.doc1 { width: 100%; min-height: 840px; min-height: 129.4118cqw; padding: 38px 40px; display: flex; flex-direction: column; color: #26302d; }
@@ -273,11 +288,11 @@
     .v1 .doc1 .paper-totals .grand { border-color: #6f503f; font-size: 16px; }
     .v1 .doc1 .paper-totals div { padding: 5px 0; }
     .v1 .doc1 .paper-totals .balance { border-top: 1px solid #d9dfda; font-weight: 800; }
-    .invoice-number { position: relative; min-width: 0; height: 70px; display: flex; align-items: center; margin: 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: 11px; background: var(--soft); }
+    .invoice-number { position: relative; min-width: 0; height: 44px; display: flex; align-items: center; margin: 0; padding: 4px 7px 4px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--soft); }
     .number-row { width: 100%; min-width: 0; display: flex; align-items: center; gap: 5px; }
     .number-prefix { flex: none; color: var(--muted); font-size: 13px; font-weight: 700; }
     .number-value { font-size: 20px; line-height: 1; color: var(--ink); }
-    .number-row button, .number-row input { height: 36px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); }
+    .number-row button, .number-row input { height: 32px; min-height: 32px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--ink); }
     .number-row button { flex: none; min-width: 32px; padding: 0 5px; font-size: 17px; font-weight: 700; }
     .number-row button:hover { border-color: var(--accent); box-shadow: inset 0 0 0 2px #42a87538; }
     .number-row .number-edit { margin-left: auto; }

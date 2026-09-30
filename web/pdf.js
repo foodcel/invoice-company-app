@@ -37,11 +37,11 @@ const LABELS = {
     },
     soumission: {
       title: 'Soumission', party: 'Proposition pour', date: 'Valide jusqu’au',
-      deposit: 'Total des dépôts', payments: 'DÉPÔTS DEMANDÉS', balance: 'Solde après dépôt',
+      deposit: 'Total des dépôts', payments: 'DÉPÔTS DEMANDÉS', balance: 'Balance',
     },
     facture: {
       title: 'Facture', party: 'Facturé à', date: 'Date limite de paiement',
-      deposit: 'Total reçu', payments: 'PAIEMENTS REÇUS', balance: 'Solde à payer',
+      deposit: 'Total reçu', payments: 'PAIEMENTS REÇUS', balance: 'Balance',
     },
   },
   en: {

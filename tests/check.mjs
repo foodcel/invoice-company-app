@@ -5,3 +5,5 @@ import './update-manifest.test.mjs';
 import './voice-workflow.test.mjs';
 import './voice-capture.test.mjs';
 import './business-settings.test.mjs';
+import './email-export.test.mjs';
+import './email-check.mjs';

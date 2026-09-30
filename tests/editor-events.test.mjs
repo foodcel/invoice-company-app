@@ -10,16 +10,17 @@ function editor(source) {
   const start = source.indexOf("    document.addEventListener('click', async event => {");
   const end = source.indexOf("    document.addEventListener('change', event => {");
   assert.ok(start >= 0 && end > start, 'Production event listeners were not found');
-  const listeners = {}, calls = { dirty: 0, saves: 0, render: 0, undo: 0 };
+  const listeners = {}, calls = { dirty: 0, saves: 0, render: 0, undo: 0, mail: 0, mailSettings: 0 };
   const state = { id: 'probe', kind: 'facture', client: '', items: [{ description: '', quantity: '1', price: '' }], payments: [{ amount: '', date: '' }] };
   const context = {
-    state, busy: false, englishMode: false, voiceSession: null, voiceRecovery: null,
+    state, busy: false, mailOpen: false, englishMode: false, voiceSession: null, voiceRecovery: null,
     voiceRetryBusy: false, lineAssist: null, calendarField: null, calendarView: null,
     document: { addEventListener: (name, fn) => listeners[name] = fn, querySelector: () => null },
     rememberUndo: () => calls.undo++, markDirty: () => calls.dirty++,
     saveNow: async () => { calls.saves++; }, render: () => calls.render++,
     releaseVoiceField() {}, releaseVoiceItem() {}, sync() {}, paintValidation() {},
-    deposit: () => paymentTotal(state), notice() {}
+    deposit: () => paymentTotal(state), notice() {},
+    composeEmail: async () => calls.mail++, showMailSettings: async () => calls.mailSettings++
   };
   vm.runInNewContext(source.slice(start, end), context);
   const input = (dataset, value) => listeners.input({ target: { dataset, value, tagName: 'INPUT', hasAttribute: () => false } });
@@ -61,4 +62,20 @@ test('production form listeners preserve typing and route payment Add/Remove cli
   assert.ok(source.includes(marker));
   const broken = editor(source.replace(marker, "      if (b.hasAttribute('data-add-payment')) return;\n" + marker));
   assert.throws(() => broken.input({ field: 'client' }, 'Peter'), /b is not defined/);
+});
+
+test('production Send and Outlook settings route once and respect active voice/editor overlays', async () => {
+  const source = await readFile(new URL('../web/app.js', import.meta.url), 'utf8');
+  const probe = editor(source);
+  await probe.click('data-send-email');
+  await probe.click('data-mail-settings');
+  assert.equal(probe.calls.mail, 1);
+  assert.equal(probe.calls.mailSettings, 1);
+  probe.context.mailOpen = true;
+  await probe.click('data-send-email');
+  assert.equal(probe.calls.mail, 1);
+  probe.context.mailOpen = false;
+  probe.context.voiceSession = { stopping: false };
+  await probe.click('data-send-email');
+  assert.equal(probe.calls.mail, 1);
 });
