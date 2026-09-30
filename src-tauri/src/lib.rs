@@ -13,6 +13,8 @@ use tauri::Manager;
 use uuid::Uuid;
 
 mod ai;
+mod business_ai;
+mod subscription_ai;
 mod local_asr;
 
 type AppResult<T> = Result<T, String>;
@@ -115,17 +117,21 @@ pub struct StateResponse {
 #[serde(rename_all = "camelCase")]
 pub struct AiSettings {
     provider: String,
-    openai_configured: bool,
-    zai_configured: bool,
+    chatgpt_configured: bool,
+    business_configured: bool,
+    auth_pending: bool,
+    auth_error: Option<String>,
 }
 
-fn default_ai_provider() -> String { "openai".into() }
+fn default_ai_provider() -> String { "chatgpt".into() }
 
 fn ai_settings(provider: String) -> AppResult<AiSettings> {
     Ok(AiSettings {
         provider,
-        openai_configured: ai::has_key("openai")?,
-        zai_configured: ai::has_key("zai")?,
+        chatgpt_configured: subscription_ai::has_connection()?,
+        business_configured: ai::has_key("business")?,
+        auth_pending: subscription_ai::pending(),
+        auth_error: subscription_ai::login_error().or_else(subscription_ai::credential_error),
     })
 }
 
@@ -160,6 +166,8 @@ struct Store {
     next_invoice_number: u64,
     #[serde(default = "default_ai_provider")]
     ai_provider: String,
+    #[serde(skip)]
+    ai_provider_migrated: bool,
     #[serde(default)]
     pdf_directory: Option<String>,
     records: Vec<Record>,
@@ -205,6 +213,7 @@ impl Store {
             current_id: draft.id.clone(),
             next_invoice_number: FIRST_INVOICE_NUMBER,
             ai_provider: default_ai_provider(),
+            ai_provider_migrated: false,
             pdf_directory: None,
             records: vec![Record {
                 id: draft.id.clone(),
@@ -301,10 +310,10 @@ impl Repository {
         };
         let bytes = serde_json::to_vec_pretty(&chosen)
             .map_err(|e| format!("Impossible de préparer la récupération : {e}"))?;
-        if !matches!(&primary, Ok(Some(s)) if s.generation == chosen.generation) {
+        if !matches!(&primary, Ok(Some(s)) if s.generation == chosen.generation && !s.ai_provider_migrated) {
             let _ = atomic_replace(&self.primary(), &bytes);
         }
-        if !matches!(&backup, Ok(Some(s)) if s.generation == chosen.generation) {
+        if !matches!(&backup, Ok(Some(s)) if s.generation == chosen.generation && !s.ai_provider_migrated) {
             let _ = atomic_replace(&self.backup(), &bytes);
         }
         Ok(chosen)
@@ -972,7 +981,7 @@ fn validate_store(store: &Store) -> AppResult<()> {
     if store.schema_version != 1 {
         return Err("Version de données inconnue; aucune donnée n'a été écrasée.".into());
     }
-    if store.ai_provider != "openai" && store.ai_provider != "zai" {
+    if !matches!(store.ai_provider.as_str(), "chatgpt" | "business") {
         return Err("Service IA inconnu; les données locales n'ont pas été écrasées.".into());
     }
     if store.next_invoice_number == 0
@@ -1064,6 +1073,7 @@ fn read_store(path: &Path) -> AppResult<Option<Store>> {
         Err(error) => return Err(error.to_string()),
     };
     let mut store: Store = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    if matches!(store.ai_provider.as_str(), "openai" | "zai") { store.ai_provider = default_ai_provider(); store.ai_provider_migrated = true; }
     for record in &mut store.records { migrate_draft_payments(&mut record.draft); }
     for versions in store.versions.values_mut() {
         for draft in versions { migrate_draft_payments(draft); }
@@ -1270,7 +1280,7 @@ fn set_ai_provider(
     lock: tauri::State<'_, Mutex<()>>,
     provider: String,
 ) -> AppResult<AiSettings> {
-    if provider != "openai" && provider != "zai" { return Err("Service IA invalide.".into()); }
+    if !matches!(provider.as_str(), "chatgpt" | "business") { return Err("Service IA invalide.".into()); }
     let selected = with_repo(app, lock, |repo| {
         let mut store = repo.load()?;
         store.ai_provider = provider;
@@ -1287,9 +1297,37 @@ fn set_ai_key(
     provider: String,
     key: Option<String>,
 ) -> AppResult<AiSettings> {
+    if provider != "business" { return Err("Les clés API ne sont pas acceptées dans cette application.".into()); }
     ai::set_key(&provider, key.as_deref())?;
     let selected = with_repo(app, lock, |repo| Ok(repo.load()?.ai_provider))?;
     ai_settings(selected)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatgptStart { settings: AiSettings, attempt_id: String }
+
+#[tauri::command]
+async fn start_chatgpt_login(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<()>>) -> AppResult<ChatgptStart> {
+    let provider = with_repo(app, lock, |repo| Ok(repo.load()?.ai_provider))?;
+    let attempt_id = subscription_ai::start().await?;
+    Ok(ChatgptStart { settings: ai_settings(provider)?, attempt_id })
+}
+
+#[tauri::command]
+fn open_chatgpt_login(attempt: String) -> AppResult<()> { subscription_ai::open_login_url(&attempt) }
+
+#[tauri::command]
+fn cancel_chatgpt_login(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<()>>) -> AppResult<AiSettings> {
+    subscription_ai::cancel()?;
+    get_ai_settings(app, lock)
+}
+
+#[tauri::command]
+async fn disconnect_chatgpt(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<()>>) -> AppResult<AiSettings> {
+    let warning = subscription_ai::disconnect().await?;
+    subscription_ai::set_login_message(warning);
+    get_ai_settings(app, lock)
 }
 
 #[tauri::command]
@@ -1309,6 +1347,20 @@ async fn ai_translate_english(
     })?;
     ai::translate(&provider, &draft.project, &draft.notes,
         &draft.items.iter().map(|item| item.description.clone()).collect::<Vec<_>>()).await
+}
+
+/// User-triggered provider check: only synthetic example data, never a draft.
+#[tauri::command]
+async fn test_ai_connection(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+) -> AppResult<String> {
+    let provider = with_repo(app, lock, |repo| Ok(repo.load()?.ai_provider))?;
+    let rewritten = ai::rewrite_line(&provider, "Fabrication d’un escalier en chêne, installation comprise.", "prose", 0).await?;
+    let translated = ai::translate(&provider, "Escalier", "", &[rewritten]).await?;
+    let extracted = ai::extract_document(&provider, "Le nom du client est Client Démonstration. Le projet est Escalier.").await?;
+    if extracted.client.as_deref().unwrap_or("").is_empty() { return Err("Le test de remplissage n’a pas reconnu le client.".into()); }
+    Ok(format!("Connexion vérifiée : rédaction, traduction et remplissage. Exemple anglais : {}", translated.descriptions[0]))
 }
 
 #[tauri::command]
@@ -1354,9 +1406,17 @@ fn export_pdf(
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| { if let Some(window) = app.get_webview_window("main") { let _ = window.show(); let _ = window.set_focus(); } }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            business_ai::configure(app.path().resource_dir()?.join("resources/codex/codex.exe"));
+            let auth_directory = app.path().app_local_data_dir()?.join("subscription-auth");
+            fs::create_dir_all(&auth_directory)?;
+            subscription_ai::configure(auth_directory);
+            Ok(())
+        })
         .manage(Mutex::new(()))
         .manage(local_asr::LocalAsr::default())
         .invoke_handler(tauri::generate_handler![
@@ -1370,6 +1430,11 @@ pub fn run() {
             get_ai_settings,
             set_ai_provider,
             set_ai_key,
+            start_chatgpt_login,
+            open_chatgpt_login,
+            cancel_chatgpt_login,
+            disconnect_chatgpt,
+            test_ai_connection,
             ai_translate_english,
             start_local_asr,
             ai_rewrite_line,
@@ -1405,6 +1470,31 @@ mod tests {
         draft.items[0].description = "Travail".into();
         draft.items[0].price = "100,00".into();
         draft
+    }
+
+    #[test]
+    fn legacy_metered_selection_migrates_without_losing_drafts() {
+        for provider in ["openai", "zai"] {
+            let (_temp, repo) = setup();
+            let mut store = Store::fresh();
+            repo.commit(&mut store).unwrap();
+            store.ai_provider = provider.into();
+            let client = store.records[0].draft.client.clone();
+            let id = store.records[0].draft.id.clone();
+            let bytes = serde_json::to_vec_pretty(&store).unwrap();
+            fs::write(repo.primary(), &bytes).unwrap();
+            fs::write(repo.backup(), &bytes).unwrap();
+            let loaded = repo.load().unwrap();
+            assert_eq!(loaded.ai_provider, "chatgpt");
+            assert_eq!(loaded.records[0].draft.id, id);
+            assert_eq!(loaded.records[0].draft.client, client);
+            for path in [repo.primary(), repo.backup()] {
+                let persisted: Store = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+                assert_eq!(persisted.ai_provider, "chatgpt");
+            }
+            store.ai_provider = provider.into();
+            assert!(validate_store(&store).is_err());
+        }
     }
 
     #[test]

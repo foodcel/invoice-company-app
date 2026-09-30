@@ -14,5 +14,5 @@ call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat" >nul
 if errorlevel 1 exit /b %ERRORLEVEL%
 set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
 cd /d "%~dp0.."
-call cargo test --manifest-path src-tauri\Cargo.toml
+call cargo test --manifest-path src-tauri\Cargo.toml %*
 exit /b %ERRORLEVEL%

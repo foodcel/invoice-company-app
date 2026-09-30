@@ -11,3 +11,4 @@ release-output/
 src-tauri/resources/nemotron/runtime/
 src-tauri/resources/nemotron/runtime.zip
 src-tauri/resources/nemotron/*.gguf
+src-tauri/resources/codex/*.exe

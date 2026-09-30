@@ -4,3 +4,4 @@ import './editor-events.test.mjs';
 import './update-manifest.test.mjs';
 import './voice-workflow.test.mjs';
 import './voice-capture.test.mjs';
+import './business-settings.test.mjs';

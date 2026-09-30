@@ -41,6 +41,7 @@
     let settingsOpen = false;
     let settingsBusy = false;
     let settingsError = '';
+    let settingsSuccess = '';
     let aiSettings = null;
     let lineAssist = null;
     let activeCapture = null;
@@ -411,9 +412,28 @@
     function aiSettingsDialog() {
       if (!settingsOpen) return '';
       if (!aiSettings) return `<div class="recent-backdrop"><div class="recent-panel ai-settings-panel" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title" tabindex="-1"><div class="recent-head"><h3 id="ai-settings-title">Réglages de l’IA</h3><button type="button" data-close-ai-settings aria-label="Fermer les réglages">✕</button></div><p>${settingsError ? esc(settingsError) : 'Chargement des réglages…'}</p></div></div>`;
-      const provider = aiSettings?.provider || 'openai';
-      const activeConfigured = provider === 'openai' ? aiSettings?.openaiConfigured : aiSettings?.zaiConfigured;
-      return `<div class="recent-backdrop"><div class="recent-panel ai-settings-panel" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title" tabindex="-1"><div class="recent-head"><h3 id="ai-settings-title">Réglages de l’IA</h3><button type="button" data-close-ai-settings aria-label="Fermer les réglages" ${settingsBusy ? 'disabled' : ''}>✕</button></div><p class="recent-hint">Le microphone est transcrit localement sur cet ordinateur avec Nemotron 3.5. Les paroles reconnues et le contenu du client sont envoyés au service choisi pour remplir le document, améliorer une ligne ou traduire.</p><fieldset class="provider-choices"><legend>Service pour comprendre et rédiger le texte</legend><label><input type="radio" name="ai-provider" value="openai" ${provider === 'openai' ? 'checked' : ''} ${settingsBusy ? 'disabled' : ''}> OpenAI ${aiSettings?.openaiConfigured ? '· clé enregistrée' : ''}</label><label><input type="radio" name="ai-provider" value="zai" ${provider === 'zai' ? 'checked' : ''} ${settingsBusy ? 'disabled' : ''}> Z.ai ${aiSettings?.zaiConfigured ? '· clé enregistrée' : ''}</label></fieldset><p class="settings-note">La transcription vocale locale ne nécessite pas de clé. Les fonctions IA de rédaction, remplissage et traduction nécessitent une clé d’API générale du service choisi. Votre abonnement Codex ou Z.ai Coding Plan ne donne pas automatiquement accès aux appels de cette application.</p><label for="ai-key">${activeConfigured ? 'Remplacer la clé du service choisi' : 'Ajouter la clé du service choisi'}<input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Clé d’API" ${settingsBusy ? 'disabled' : ''}></label><div class="folder-actions"><button type="button" class="primary" data-save-ai-key ${settingsBusy ? 'disabled' : ''}>Enregistrer la clé</button>${activeConfigured ? `<button type="button" class="plain-button" data-remove-ai-key ${settingsBusy ? 'disabled' : ''}>Supprimer la clé</button>` : ''}</div><p class="settings-note">La clé est gardée dans le coffre de Windows, séparément des brouillons et des PDF.</p>${settingsError ? `<p class="translation-error" role="alert">${esc(settingsError)}</p>` : ''}</div></div>`;
+      const provider = aiSettings.provider;
+      const business = provider === 'business';
+      const activeConfigured = business ? aiSettings.businessConfigured : provider === 'chatgpt' && aiSettings.chatgptConfigured;
+      const disabled = settingsBusy ? 'disabled' : '';
+      return `<div class="recent-backdrop"><div class="recent-panel ai-settings-panel" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title" tabindex="-1">
+        <div class="recent-head"><h3 id="ai-settings-title">Réglages de l’IA</h3><button type="button" data-close-ai-settings aria-label="Fermer les réglages" ${settingsBusy ? 'disabled' : ''}>✕</button></div>
+        <p class="recent-hint">Le microphone est transcrit localement avec Nemotron 3.5. Le texte reconnu est envoyé au service choisi pour remplir le document, améliorer une ligne ou traduire.</p>
+        <fieldset class="provider-choices"><legend>Service pour comprendre et rédiger le texte</legend>
+          <label><input type="radio" name="ai-provider" value="chatgpt" ${provider === 'chatgpt' ? 'checked' : ''} ${disabled}> ChatGPT · abonnement Pro / personnel ${aiSettings.chatgptConfigured ? '· connecté' : ''}</label>
+          <label><input type="radio" name="ai-provider" value="business" ${business ? 'checked' : ''} ${disabled}> Business ${aiSettings.businessConfigured ? '· jeton enregistré' : ''}</label>
+        </fieldset>
+        <p class="settings-note">Z.ai et Claude : connexion par abonnement non disponible dans cette version.</p>
+        ${business ? `<p class="settings-note">Utilise un jeton d’accès Codex créé dans votre espace ChatGPT Business, selon ses autorisations et limites.</p>
+        <p class="settings-note">Dans ChatGPT : Paramètres de l’espace → Access tokens → Create. Choisissez Codex si des portées sont proposées. Collez le jeton ci-dessous, uniquement sur cet ordinateur.</p>
+        <label for="ai-key">${activeConfigured ? 'Remplacer le ' : 'Ajouter le '}jeton Business<input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Jeton d’accès Codex de l’espace Business" ${disabled}></label>
+        <div class="folder-actions"><button type="button" class="primary" data-save-ai-key ${disabled}>Enregistrer le jeton</button>${activeConfigured ? `<button type="button" class="plain-button" data-test-ai ${disabled}>Tester la connexion</button><button type="button" class="plain-button" data-remove-ai-key ${disabled}>Supprimer</button>` : ''}</div>` : `<p class="settings-note">Connectez votre compte ChatGPT pour utiliser votre abonnement Pro ou personnel.</p>
+        ${aiSettings.authPending ? '<p class="settings-note" role="status">Connexion en attente. Terminez la connexion dans le navigateur, puis actualisez ici.</p>' : ''}
+        <div class="folder-actions"><button type="button" class="primary" data-start-chatgpt-login ${settingsBusy || aiSettings.authPending ? 'disabled' : ''}>Se connecter à ChatGPT</button>${aiSettings.authPending ? `<button type="button" class="plain-button" data-refresh-ai-settings ${disabled}>Actualiser la connexion</button><button type="button" class="plain-button" data-cancel-chatgpt-login ${disabled}>Annuler la connexion</button>` : ''}${activeConfigured ? `<button type="button" class="plain-button" data-test-ai ${disabled}>Tester la connexion</button>` : ''}${activeConfigured || aiSettings.authError ? `<button type="button" class="plain-button" data-disconnect-chatgpt ${disabled}>Déconnecter ChatGPT</button>` : ''}</div>`}
+        <p class="settings-note">${settingsBusy ? 'Traitement en cours… ' : ''}Les identifiants restent dans le coffre de Windows, séparément des brouillons et des PDF. Le test utilise uniquement trois demandes d’exemple.</p>
+        ${settingsSuccess ? `<p class="settings-success" role="status">${esc(settingsSuccess)}</p>` : ''}
+        ${settingsError || aiSettings.authError ? `<p class="translation-error" role="status">${esc(settingsError || aiSettings.authError)}</p>` : ''}
+      </div></div>`;
     }
     function invoiceNumberControl() {
       if (state.kind !== 'facture') return '';
@@ -645,42 +665,86 @@
       document.querySelector('[data-folder]')?.focus();
     }
     async function openAiSettings() {
-      settingsOpen = true; settingsError = ''; aiSettings = null; render();
+      settingsOpen = true; settingsError = ''; settingsSuccess = ''; aiSettings = null; render();
       try { aiSettings = await runCommand('get_ai_settings'); }
       catch (error) { settingsError = `Réglages indisponibles : ${errorText(error)}`; }
       render(); document.querySelector('.ai-settings-panel')?.focus();
     }
     function closeAiSettings() {
       if (settingsBusy) return;
-      settingsOpen = false; settingsError = ''; render();
+      settingsOpen = false; settingsError = ''; settingsSuccess = ''; render();
       document.querySelector('[data-ai-settings]')?.focus();
     }
     async function changeAiProvider(provider) {
-      if (settingsBusy || !['openai', 'zai'].includes(provider)) return;
-      settingsBusy = true; settingsError = '';
+      if (settingsBusy || !['chatgpt', 'business'].includes(provider)) return;
+      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
       try { aiSettings = await runCommand('set_ai_provider', { provider }); }
-      catch (error) { settingsError = `Service inchangé : ${errorText(error)}`; }
+      catch (error) { settingsError = `Sélection indisponible : ${errorText(error)}`; }
       finally { settingsBusy = false; render(); document.querySelector(`input[name="ai-provider"][value="${provider}"]`)?.focus(); }
     }
+    async function startChatgptLogin() {
+      if (settingsBusy || aiSettings?.provider !== 'chatgpt' || aiSettings.authPending) return;
+      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
+      try {
+        const result = await runCommand('start_chatgpt_login');
+        aiSettings = result.settings;
+        if (result.attemptId) await runCommand('open_chatgpt_login', { attempt: result.attemptId });
+      } catch (error) { settingsError = `Connexion indisponible : ${errorText(error)}`; }
+      finally { settingsBusy = false; render(); document.querySelector('[data-refresh-ai-settings], [data-start-chatgpt-login]')?.focus(); }
+    }
+    async function refreshAiSettings() {
+      if (settingsBusy) return;
+      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
+      try { aiSettings = await runCommand('get_ai_settings'); }
+      catch (error) { settingsError = `Actualisation indisponible : ${errorText(error)}`; }
+      finally { settingsBusy = false; render(); document.querySelector('[data-refresh-ai-settings], [data-test-ai], [data-start-chatgpt-login]')?.focus(); }
+    }
+    async function cancelChatgptLogin() {
+      if (settingsBusy || !aiSettings?.authPending) return;
+      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
+      try { aiSettings = await runCommand('cancel_chatgpt_login'); }
+      catch (error) { settingsError = `Annulation indisponible : ${errorText(error)}`; }
+      finally { settingsBusy = false; render(); document.querySelector('[data-start-chatgpt-login]')?.focus(); }
+    }
+    async function disconnectChatgpt() {
+      if (settingsBusy || !(aiSettings?.chatgptConfigured || aiSettings?.authError)) return;
+      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
+      try { aiSettings = await runCommand('disconnect_chatgpt'); }
+      catch (error) { settingsError = `Déconnexion indisponible : ${errorText(error)}`; }
+      finally { settingsBusy = false; render(); document.querySelector('[data-start-chatgpt-login]')?.focus(); }
+    }
     async function saveAiKey(remove = false) {
-      if (settingsBusy || !aiSettings) return;
-      const provider = aiSettings.provider;
+      if (settingsBusy || aiSettings?.provider !== 'business') return;
+      const provider = 'business';
       const key = remove ? null : document.getElementById('ai-key')?.value?.trim();
-      if (!remove && !key) { settingsError = 'Entrez une clé d’API avant de l’enregistrer.'; render(); return; }
-      if (remove && !confirm(`Supprimer la clé ${provider === 'openai' ? 'OpenAI' : 'Z.ai'} enregistrée sur cet ordinateur ?`)) return;
-      settingsBusy = true; settingsError = '';
+      if (!remove && !key) { settingsSuccess = ''; settingsError = 'Entrez le jeton Business avant de l’enregistrer.'; render(); return; }
+      if (remove && !confirm('Supprimer les identifiants IA enregistrés pour ce service sur cet ordinateur ?')) return;
+      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
       try {
         aiSettings = await runCommand('set_ai_key', { provider, key });
-        notice(remove ? 'Clé supprimée.' : 'Clé enregistrée dans Windows.');
-      } catch (error) { settingsError = `Clé inchangée : ${errorText(error)}`; }
+        notice(remove ? 'Identifiants supprimés.' : 'Identifiants enregistrés dans Windows. Testez la connexion pour les vérifier.');
+      } catch (error) { settingsError = `Enregistrement indisponible : ${errorText(error)}`; }
       finally { settingsBusy = false; render(); document.getElementById('ai-key')?.focus(); }
+    }
+    async function testAiConnection() {
+      if (settingsBusy) return;
+      if (aiSettings?.provider === 'business' && document.getElementById('ai-key')?.value?.trim()) {
+        // Preserve the unsaved replacement instead of testing the previous credential.
+        notice('Enregistrez d’abord le nouveau jeton Business, puis testez la connexion.');
+        return;
+      }
+      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
+      try { settingsSuccess = await runCommand('test_ai_connection'); }
+      catch (error) { settingsError = `Connexion non vérifiée : ${errorText(error)}`; }
+      finally { settingsBusy = false; render(); }
     }
     async function aiReady() {
       try {
         aiSettings = await runCommand('get_ai_settings');
-        const configured = aiSettings.provider === 'openai' ? aiSettings.openaiConfigured : aiSettings.zaiConfigured;
+        const configured = aiSettings.provider === 'business' ? aiSettings.businessConfigured : aiSettings.provider === 'chatgpt' && aiSettings.chatgptConfigured;
+        // Enables an authenticated attempt. Only a completed provider response proves access.
         if (configured) return true;
-        notice('Ajoutez une clé pour le service IA choisi.');
+        notice(aiSettings.provider === 'business' ? 'Ajoutez votre jeton Business dans les réglages.' : 'Connectez votre compte ChatGPT dans les réglages.');
         await openAiSettings();
       } catch (error) { notice(`IA indisponible : ${errorText(error)}`); }
       return false;
@@ -1093,8 +1157,13 @@
       if (voiceSession || voiceRetryBusy || lineAssist?.recording || lineAssist?.processing || lineAssist?.stopping) {
         notice('Terminez la dictée ou la proposition en cours avant cette action.'); return;
       }
+      if (b.hasAttribute('data-test-ai')) { await testAiConnection(); return; }
       if (b.hasAttribute('data-ai-settings')) { await openAiSettings(); return; }
       if (b.hasAttribute('data-close-ai-settings')) { closeAiSettings(); return; }
+      if (b.hasAttribute('data-start-chatgpt-login')) { await startChatgptLogin(); return; }
+      if (b.hasAttribute('data-refresh-ai-settings')) { await refreshAiSettings(); return; }
+      if (b.hasAttribute('data-cancel-chatgpt-login')) { await cancelChatgptLogin(); return; }
+      if (b.hasAttribute('data-disconnect-chatgpt')) { await disconnectChatgpt(); return; }
       if (b.hasAttribute('data-save-ai-key')) { await saveAiKey(); return; }
       if (b.hasAttribute('data-remove-ai-key')) { await saveAiKey(true); return; }
       if (b.hasAttribute('data-retry-document-voice')) { await retryDocumentVoice(); return; }

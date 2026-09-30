@@ -29,7 +29,7 @@ impl LocalAsr {
         }
         *current = None;
 
-        let base = app.path().resource_dir().map_err(|e| e.to_string())?.join("nemotron");
+        let base = app.path().resource_dir().map_err(|e| e.to_string())?.join("resources/nemotron");
         let exe = base.join("runtime/bin/nemo-speech.exe");
         let model = base.join(MODEL);
         if !exe.is_file() || !model.is_file() {
