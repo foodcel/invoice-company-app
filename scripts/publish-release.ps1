@@ -15,7 +15,13 @@ foreach ($name in $files) {
 }
 
 $env:GCM_INTERACTIVE = 'never'
-$credential = @('protocol=https', 'host=github.com', '') | git credential fill 2>$null
+$releasePreviousEncoding = $OutputEncoding
+try {
+    $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+    $credential = @('protocol=https', 'host=github.com', '') | git credential fill 2>$null
+} finally {
+    $OutputEncoding = $releasePreviousEncoding
+}
 $token = ($credential | Where-Object { $_ -match '^password=' } | Select-Object -First 1) -replace '^password=', ''
 if (-not $token) { throw 'Sign in to GitHub with Git Credential Manager before publishing.' }
 $headers = @{ Authorization = "Bearer $token"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
