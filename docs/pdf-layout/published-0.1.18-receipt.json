@@ -1,0 +1,24 @@
+{
+  "installerDigestMatches": true,
+  "url": "https://github.com/foodcel/invoice-company-app/releases/tag/v0.1.18",
+  "assets": [
+    {
+      "name": "latest.json",
+      "size": 810,
+      "digest": "sha256:59acf262b6ccea69082b27fa07f6a96c16b0c1fb21d02c85b7dd11b6bc9e38e7"
+    },
+    {
+      "name": "Soumissions-et-factures_0.1.18_x64-setup.exe",
+      "size": 822175923,
+      "digest": "sha256:57416fd15a34e4932df991507eff2b520194c89e9f0b36caf0d9dee604152db6"
+    },
+    {
+      "name": "Soumissions-et-factures_0.1.18_x64-setup.exe.sig",
+      "size": 460,
+      "digest": "sha256:c1b4c3bdb35a9ff01462deb44dd22607396f0ac52ebd47ce5112108e0e5ad464"
+    }
+  ],
+  "version": "0.1.18",
+  "public": true,
+  "latestSignatureMatches": true
+}
