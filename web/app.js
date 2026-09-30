@@ -3,6 +3,7 @@
     import { relaunch } from '@tauri-apps/plugin-process';
     import { open as pickFolder } from '@tauri-apps/plugin-dialog';
     import { createPdf } from './pdf.js';
+    import { formatPhone, formatPhoneInput } from './phone.js';
     import { openEmailComposer, openMailSettings } from './email-composer.js';
     import './email-composer.css';
     import { paymentRows, paymentTotal, paymentIssues } from './payments.js';
@@ -277,9 +278,9 @@
       const title = en ? (invoice ? 'Payments received' : 'Deposits requested') : (invoice ? 'Paiements reçus' : 'Dépôts demandés');
       return `<b>${title}</b>${rows.map(payment => `<div class="payment-detail"><span>${esc(displayDate(payment.date) || (en ? 'Date not specified' : 'Date non précisée'))}</span><strong>${money(value(payment.amount))}</strong></div>`).join('')}`;
     }
-    const input = (field, label, placeholder = '', type = 'text', span = '') => type === 'date' ? dateControl(field, label, span) : `<label class="${span}">${label}<input data-field="${field}" type="${type}" value="${esc(state[field])}" placeholder="${esc(placeholder)}" ${field === 'client' ? 'required' : ''}></label>`;
+    const input = (field, label, placeholder = '', type = 'text', span = '') => type === 'date' ? dateControl(field, label, span) : `<label class="${span}">${label}<input data-field="${field}" type="${type}" value="${esc(field === 'contact' ? formatPhone(state[field]) : state[field])}" placeholder="${esc(placeholder)}" ${field === 'client' ? 'required' : ''}></label>`;
     const textArea = (field, label, placeholder = '', span = '', rows = 2) => `<label class="${span}">${label}<textarea data-field="${field}" rows="${rows}" placeholder="${esc(placeholder)}">${esc(state[field] || '')}</textarea></label>`;
-    const row = (item, i) => `<div class="line-entry"><div class="line-header"><div class="line-title"><strong>Ligne ${i + 1}</strong><span>Description</span></div><div class="line-header-actions"><button type="button" class="line-dictate" aria-label="Dicter cette ligne" title="Dicter cette ligne"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg></button><button type="button" class="line-enhance" aria-label="Améliorer cette ligne" title="Améliorer cette ligne"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2ZM19 16l.7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></svg></button></div><button type="button" class="remove-line" data-remove="${i}" aria-label="Retirer la ligne ${i + 1}" title="Retirer la ligne ${i + 1}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 5 19 19M19 5 5 19"/></svg></button></div><div class="line-body"><label for="line-description-${i}" class="sr-only">Description de la ligne ${i + 1}</label><textarea id="line-description-${i}" data-item="${i}" data-key="description" rows="2" placeholder="Décrivez les travaux, matériaux ou étapes en détail">${esc(item.description)}</textarea><div class="line-details"><label>Qté<input data-item="${i}" data-key="quantity" value="${esc(item.quantity)}" inputmode="decimal" placeholder="1"></label><label>Prix unitaire<input data-item="${i}" data-key="price" value="${esc(item.price)}" inputmode="decimal" placeholder="0,00"></label><div class="line-amount-wrap"><span>Montant</span><strong class="line-amount" data-row-total="${i}">${money(value(item.quantity) * value(item.price))}</strong></div></div></div></div>`;
+    const row = (item, i) => `<div class="line-entry"><div class="line-header"><div class="line-title"><strong>Ligne ${i + 1}</strong><span>Description</span></div><div class="line-header-actions"><button type="button" class="line-dictate" aria-label="Dicter cette ligne" title="Dicter cette ligne"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg></button><button type="button" class="line-enhance" aria-label="Améliorer cette ligne" title="Améliorer cette ligne"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2ZM19 16l.7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></svg></button></div><button type="button" class="remove-line" data-remove="${i}" aria-label="Retirer la ligne ${i + 1}" title="Retirer la ligne ${i + 1}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 5 19 19M19 5 5 19"/></svg></button></div><div class="line-body"><label for="line-description-${i}" class="sr-only">Description de la ligne ${i + 1}</label><textarea id="line-description-${i}" data-item="${i}" data-key="description" rows="2" placeholder="Décrivez les travaux, matériaux ou étapes en détail">${esc(item.description)}</textarea><div class="line-details"><label>Qté<span class="line-input-shell"><input data-item="${i}" data-key="quantity" aria-label="Quantité de la ligne ${i + 1}" value="${esc(item.quantity)}" inputmode="decimal" placeholder="1"><span class="quantity-steps"><button type="button" data-quantity-step="1" data-line="${i}" aria-label="Augmenter la quantité de la ligne ${i + 1}" title="Augmenter la quantité"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 10 4-4 4 4"/></svg></button><button type="button" data-quantity-step="-1" data-line="${i}" aria-label="Diminuer la quantité de la ligne ${i + 1}" title="Diminuer la quantité"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button></span></span></label><label>Prix unitaire<span class="line-input-shell"><input data-item="${i}" data-key="price" value="${esc(item.price)}" inputmode="decimal" placeholder="0,00"><span class="line-price-symbol" aria-hidden="true">$</span></span></label><div class="line-amount-wrap"><span>Montant</span><strong class="line-amount" data-row-total="${i}">${money(value(item.quantity) * value(item.price))}</strong></div></div></div></div>`;
     function fitTextareas(root = document) {
       root.querySelectorAll('textarea').forEach(el => {
         el.style.height = 'auto';
@@ -306,7 +307,7 @@
       return `<div class="paper doc1">
         <div class="paper-top"><div class="paper-logo"><div class="paper-mark" aria-hidden="true"><img src="${businessCardImage}" alt="" width="374" height="339"></div><div class="paper-name"><strong>ÉBÉNISTERIE</strong><small>DE L'HERMITAGE INC.</small></div></div><div class="paper-type">${en ? (invoice ? 'Invoice' : 'Quote') : kindTitle()}${number}</div></div>
         <div class="doc1-summary"><div><b>${en ? 'Project' : 'Projet'}</b><strong class="project-name" data-preview="project">${esc(view.project || (en ? 'Project name' : 'Nom du projet'))}</strong></div><div><b>${en ? 'Document date' : 'Date du document'}</b><span data-preview="date">${esc(displayDate(state.date))}</span></div><div><b>${dateLabel}</b><span data-preview="${dateField}">${esc(displayDate(state[dateField]) || (invoice ? (en ? 'None' : 'Aucune') : ''))}</span></div></div>
-        <div class="doc1-parties"><div class="doc1-party"><b>${en ? (invoice ? 'Bill to' : 'Prepared for') : (invoice ? 'Facturé à' : 'Proposition pour')}</b><strong data-preview="client">${esc(state.client || (en ? 'Client name' : 'Nom du client'))}</strong><p><span data-preview="address">${esc(state.address || (en ? 'Billing address' : 'Adresse de facturation'))}</span><span data-phone-block ${state.contact?.trim() ? '' : 'hidden'}><br>${en ? 'Tel.' : 'Tél.'} <span data-preview="contact">${esc(state.contact || '')}</span></span><span data-email-block ${state.email?.trim() ? '' : 'hidden'}><br>${en ? 'Email' : 'Courriel'} : <span data-preview="email">${esc(state.email || '')}</span></span></p><div class="doc1-ship" data-shipping-block ${state.shipTo?.trim() ? '' : 'hidden'}><b>${en ? 'Deliver to' : 'Livrer à'}</b><span data-preview="shipTo">${esc(state.shipTo || '')}</span></div></div><div class="doc1-party"><b>${en ? 'Issued by' : 'Émis par'}</b><strong>Ébénisterie de l’Hermitage inc.</strong><p>68, chemin des guides<br>Ripon (Qc) J0V 1V0<br>(819) 428-7690</p></div></div>
+        <div class="doc1-parties"><div class="doc1-party"><b>${en ? (invoice ? 'Bill to' : 'Prepared for') : (invoice ? 'Facturé à' : 'Proposition pour')}</b><strong data-preview="client">${esc(state.client || (en ? 'Client name' : 'Nom du client'))}</strong><p><span data-preview="address">${esc(state.address || (en ? 'Billing address' : 'Adresse de facturation'))}</span><span data-phone-block ${state.contact?.trim() ? '' : 'hidden'}><br>${en ? 'Tel.' : 'Tél.'} <span data-preview="contact">${esc(formatPhone(state.contact))}</span></span><span data-email-block ${state.email?.trim() ? '' : 'hidden'}><br>${en ? 'Email' : 'Courriel'} : <span data-preview="email">${esc(state.email || '')}</span></span></p><div class="doc1-ship" data-shipping-block ${state.shipTo?.trim() ? '' : 'hidden'}><b>${en ? 'Deliver to' : 'Livrer à'}</b><span data-preview="shipTo">${esc(state.shipTo || '')}</span></div></div><div class="doc1-party"><b>${en ? 'Issued by' : 'Émis par'}</b><strong>Ébénisterie de l’Hermitage inc.</strong><p>68, chemin des guides<br>Ripon (Qc) J0V 1V0<br>(819) 428-7690</p></div></div>
         <table class="paper-table"><thead><tr><th>${en ? 'Description' : 'Description'}</th><th>${en ? 'Qty' : 'Qté'}</th><th>${en ? 'Unit price' : 'Prix unitaire'}</th><th>${en ? 'Amount' : 'Montant'}</th></tr></thead><tbody id="previewRows"></tbody></table>
         <div class="doc1-closing"><div class="doc1-extras"><div class="doc1-note" data-notes-block ${view.notes?.trim() ? '' : 'hidden'}><b>${en ? 'Note to client' : 'Note pour le client'}</b><p data-preview="notes">${esc(view.notes || '')}</p></div><div class="doc1-payments" data-payment-breakdown ${hasDeposit ? '' : 'hidden'}>${paymentBreakdown()}</div></div>${totals}</div>
         <div class="doc1-footer">${footerIds}</div></div><p class="preview-caption">${en ? 'English customer copy' : 'Aperçu du document'} · format Lettre</p>`;
@@ -383,30 +384,40 @@
         enhance.dataset.lineEnhance = String(index);
         dictate.setAttribute('aria-label', `Dicter la ligne ${index + 1}`);
         enhance.setAttribute('aria-label', `Améliorer la ligne ${index + 1} avec l’IA`);
-        const assist = lineAssist?.index === index ? lineAssist : null;
+        paintLineAssist(entry, lineAssist?.index === index ? lineAssist : null,
+          entry.querySelector('textarea[data-key="description"]'), dictate, entry.querySelector('.remove-line'));
+      });
+      const notes = document.querySelector('.notes-entry');
+      if (notes) paintLineAssist(notes, lineAssist?.index === 'notes' ? lineAssist : null,
+        notes.querySelector('textarea'), notes.querySelector('[data-line-dictate]'), notes.querySelector('[data-close-line-assist]'));
+    }
+    function paintLineAssist(entry, assist, textarea, dictate, close) {
         if (!assist) return;
         dictate.disabled = Boolean(assist.stopping || assist.processing);
         entry.classList.toggle('line-recording', Boolean(assist.recording));
         dictate.setAttribute('aria-pressed', String(Boolean(assist.recording)));
-        dictate.title = assist.recording ? 'Arrêter la dictée' : 'Dicter cette ligne';
-        const close = entry.querySelector('.remove-line');
+        dictate.setAttribute('aria-label', assist.recording ? 'Arrêter la dictée' : assist.index === 'notes' ? 'Dicter la note pour le client' : `Dicter la ligne ${assist.index + 1}`);
+        dictate.title = assist.recording ? 'Arrêter la dictée' : assist.index === 'notes' ? 'Dicter la note' : 'Dicter cette ligne';
         close.removeAttribute('data-remove');
-        close.dataset.closeLineAssist = String(index);
+        close.hidden = false;
+        close.dataset.closeLineAssist = String(assist.index);
         close.setAttribute('aria-label', 'Fermer la proposition');
         close.title = 'Fermer la proposition';
-        const textarea = entry.querySelector('textarea[data-key="description"]');
         if (textarea) {
           textarea.removeAttribute('data-item');
-          if (assist.proposal && !assist.recording && !assist.processing) {
+          textarea.removeAttribute('data-field');
+          if (assist.proposal && !assist.recording && !assist.processing && !assist.stopping) {
             textarea.dataset.assistProposal = '';
             textarea.value = assist.proposal;
-          } else textarea.readOnly = true;
+          } else {
+            textarea.readOnly = true;
+            if (assist.recording) textarea.value = [assist.original, assist.transcript].filter(Boolean).join('\n');
+          }
         }
         const review = document.createElement('div');
         review.className = 'line-review';
-        review.innerHTML = `<p class="line-review-status" role="status">${esc(assist.status)}</p>${assist.proposal && !assist.recording && !assist.processing ? `<div class="line-review-styles"><button type="button" data-line-style="prose" aria-pressed="${assist.style === 'prose'}">Texte clair</button><button type="button" data-line-style="bullets" aria-pressed="${assist.style === 'bullets'}">Liste à puces</button><button type="button" data-line-variation>Autre version</button></div><div class="line-review-actions"><button type="button" class="line-accept" data-line-accept>Accepter</button></div>` : ''}`;
+        review.innerHTML = `<p class="line-review-status" role="status">${esc(assist.status)}</p>${assist.proposal && !assist.recording && !assist.processing && !assist.stopping ? `<div class="line-review-styles"><button type="button" data-line-style="prose" aria-pressed="${assist.style === 'prose'}">Texte clair</button><button type="button" data-line-style="bullets" aria-pressed="${assist.style === 'bullets'}">Liste à puces</button><button type="button" data-line-variation>Autre version</button></div><div class="line-review-actions"><button type="button" class="line-accept" data-line-accept>Accepter</button></div>` : ''}`;
         textarea?.insertAdjacentElement('afterend', review);
-      });
     }
     function folderDialog() {
       if (!folderOpen) return '';
@@ -497,7 +508,7 @@
             <button type="button" class="add-button" data-add>+ Ajouter une ligne</button>
             <div class="optional-fields"><h4>Au besoin</h4><div class="fields">
               ${paymentsControl()}
-              ${textArea('notes','Note pour le client <span class="optional">(facultatif)</span>','Ajoutez plusieurs lignes si nécessaire','span2',1)}
+              <div class="notes-entry span2"><div class="notes-heading"><label for="client-notes">Note pour le client <span class="optional">(facultatif)</span></label><div class="notes-tools"><button type="button" data-line-dictate="notes" aria-label="Dicter la note pour le client" aria-pressed="false" title="Dicter la note"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg></button><button type="button" data-line-enhance="notes" aria-label="Améliorer la note pour le client avec l’IA" title="Améliorer la note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2ZM19 16l.7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></svg></button><button type="button" data-close-line-assist="notes" aria-label="Fermer la proposition" title="Fermer la proposition" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5 19 19M19 5 5 19"/></svg></button></div></div><textarea id="client-notes" data-field="notes" rows="1" placeholder="Ajoutez plusieurs lignes si nécessaire">${esc(state.notes || '')}</textarea></div>
             </div>
             </div>
           </div>
@@ -529,7 +540,7 @@
       document.querySelectorAll('[data-notes-block]').forEach(el => { el.hidden = !view.notes?.trim(); });
       document.querySelectorAll('[data-payment-breakdown]').forEach(el => { el.hidden = deposit() <= 0; el.innerHTML = paymentBreakdown(); });
       const previewFallback = { client:englishMode ? 'Client name' : 'Nom du client', shipTo:'', address:englishMode ? 'Billing address' : 'Adresse de facturation', date:'Date', validUntil:englishMode ? 'Valid until' : 'Date de validité', dueDate:englishMode ? 'None' : 'Aucune', invoiceNumber:state.invoiceNumber ?? '—', contact:'', email:'', project:englishMode ? 'Project name' : 'Nom du projet', notes:'' };
-      for (const field of Object.keys(previewFallback)) document.querySelectorAll(`[data-preview="${field}"]`).forEach(el => el.textContent = ['date','validUntil','dueDate'].includes(field) ? displayDate(state[field]) || previewFallback[field] : view[field] || previewFallback[field]);
+      for (const field of Object.keys(previewFallback)) document.querySelectorAll(`[data-preview="${field}"]`).forEach(el => el.textContent = ['date','validUntil','dueDate'].includes(field) ? displayDate(state[field]) || previewFallback[field] : (field === 'contact' ? formatPhone(view[field]) : view[field]) || previewFallback[field]);
       const rows = view.items.filter(i => i.description?.trim() || String(i.price || '').trim()).map(i => `<tr><td>${esc(i.description || '—')}</td><td>${esc(i.quantity || '—')}</td><td>${money(value(i.price))}</td><td>${money(value(i.quantity) * value(i.price))}</td></tr>`).join('');
       const table = document.getElementById('previewRows'); if (table) table.innerHTML = rows || '<tr><td colspan="4" style="color:#87948b">Aucun article ajouté</td></tr>';
     }
@@ -671,7 +682,7 @@
       try {
         const filename = await runCommand('preview_pdf_filename', { draftId: source.id, language });
         await openEmailComposer({
-          invoke: runCommand, draft: source, language,
+          invoke: runCommand, draft: source, pdfDraft: previewSource, language,
           filename,
           previewPdf: () => createPdf(previewSource, { invoiceNumber: source.invoiceNumber, language }),
           preparePdf: async () => {
@@ -801,6 +812,13 @@
       voiceQueue = voiceQueue.catch(() => {}).then(work);
       return voiceQueue;
     };
+    function lineAssistText(index) {
+      return index === 'notes' ? state.notes : state.items[index]?.description;
+    }
+    function lineAssistTextarea(index) {
+      return index === 'notes' ? document.querySelector('#client-notes')
+        : document.querySelectorAll('.line-entry')[index]?.querySelector('textarea[data-key="description"]');
+    }
     async function proposeLine(style = 'prose', variation = 0) {
       const assist = lineAssist;
       if (!assist || !assist.source?.trim() || assist.processing) return;
@@ -826,18 +844,19 @@
     }
     async function enhanceLine(index) {
       if (activeCapture || voiceSession || lineAssist?.processing || lineAssist?.stopping) return;
-      const source = state.items[index]?.description?.trim();
-      if (!source) { notice('Écrivez d’abord une description ou utilisez le microphone.'); return; }
+      const source = lineAssistText(index)?.trim();
+      if (!source) { notice(index === 'notes' ? 'Écrivez d’abord une note ou utilisez le microphone.' : 'Écrivez d’abord une description ou utilisez le microphone.'); return; }
       if (!await aiReady()) return;
       lineAssist = { index, draftId: state.id, source, proposal: '', style: 'prose', variation: 0, status: 'Préparation du texte…', processing: false, recording: false };
       await proposeLine();
     }
     async function startLineDictation(index) {
-      if (activeCapture || voiceSession || voiceRetryBusy || lineAssist?.stopping) return;
+      if (activeCapture || voiceSession || voiceRetryBusy || lineAssist?.recording || lineAssist?.processing || lineAssist?.stopping) return;
       if (!await aiReady()) return;
       englishMode = false;
-      const original = state.items[index]?.description || '';
-      const assist = { index, draftId: state.id, source: original, transcript: '', proposal: '', style: 'prose', variation: 0, status: 'Écoute en cours… Rappuyez sur le micro pour terminer.', processing: false, recording: true };
+      const original = lineAssistText(index);
+      if (typeof original !== 'string') return;
+      const assist = { index, draftId: state.id, original, source: original, transcript: '', proposal: '', style: 'prose', variation: 0, status: 'Écoute en cours… Rappuyez sur le micro pour terminer.', processing: false, recording: true };
       lineAssist = assist; voiceQueue = Promise.resolve(); render();
       try {
         assist.status = 'Chargement du moteur vocal local…'; render();
@@ -845,15 +864,15 @@
         const controller = await startStreamingRecognition({ url,
           onPartial: partial => {
             if (lineAssist !== assist) return;
-            const box = document.querySelectorAll('.line-entry')[index]?.querySelector('textarea[data-key="description"]');
-            if (box) box.value = [original, assist.transcript, partial].filter(Boolean).join('\n');
+            const box = lineAssistTextarea(index);
+            if (box) { box.value = [original, assist.transcript, partial].filter(Boolean).join('\n'); fitTextareas(box.parentElement); }
           },
           onFinal: text => {
             if (lineAssist !== assist) return;
             assist.transcript += `${assist.transcript ? ' ' : ''}${text}`;
             assist.status = 'Texte entendu. Continuez à parler ou rappuyez sur le micro.';
-            const box = document.querySelectorAll('.line-entry')[index]?.querySelector('textarea[data-key="description"]');
-            if (box) box.value = [original, assist.transcript].filter(Boolean).join('\n');
+            const box = lineAssistTextarea(index);
+            if (box) { box.value = [original, assist.transcript].filter(Boolean).join('\n'); fitTextareas(box.parentElement); }
           },
           onError: error => { if (lineAssist === assist) {
             activeCapture = null; assist.recording = false;
@@ -869,6 +888,7 @@
         activeCapture = controller;
         assist.status = 'Écoute en cours… Rappuyez sur le micro pour terminer.'; render();
       } catch (error) {
+        if (lineAssist !== assist) return;
         activeCapture = null;
         assist.recording = false; assist.status = `Microphone indisponible : ${errorText(error)}`; render();
       }
@@ -883,11 +903,11 @@
         await voiceQueue;
         if (lineAssist !== assist) return;
         if (!assist.transcript.trim()) throw new Error('Aucune parole reconnue. Réessayez.');
-        assist.source = [state.items[assist.index]?.description, assist.transcript].filter(Boolean).join('\n');
+        assist.source = [assist.original, assist.transcript].filter(Boolean).join('\n');
         await proposeLine('prose', 0);
       } catch (error) { if (lineAssist === assist) {
         if (assist.transcript.trim()) {
-          assist.source = [state.items[assist.index]?.description, assist.transcript].filter(Boolean).join('\n');
+          assist.source = [assist.original, assist.transcript].filter(Boolean).join('\n');
           assist.proposal ||= assist.source;
         }
         assist.status = `Dictée interrompue : ${errorText(error)}. ${assist.proposal ? 'Le texte reconnu reste modifiable ici.' : 'Réessayez.'}`;
@@ -902,7 +922,7 @@
     }
     async function startDocumentDictation() {
       if (activeCapture || voiceSession) return;
-      if (lineAssist) { notice('Acceptez ou fermez la proposition de la ligne avant de dicter le document.'); return; }
+      if (lineAssist) { notice('Acceptez ou fermez la proposition en cours avant de dicter le document.'); return; }
       if (voiceRecovery) { notice('Vérifiez ou fermez les paroles déjà reconnues avant une nouvelle dictée.'); return; }
       if (!await aiReady()) return;
       englishMode = false;
@@ -1196,7 +1216,7 @@
       if (busy || !state || mailOpen) return;
       if (b.hasAttribute('data-voice')) { if (voiceSession) await stopDocumentDictation(); else await startDocumentDictation(); return; }
       if (b.dataset.lineDictate !== undefined) {
-        const index = Number(b.dataset.lineDictate);
+        const index = b.dataset.lineDictate === 'notes' ? 'notes' : Number(b.dataset.lineDictate);
         if (lineAssist?.recording && lineAssist.index === index) await stopLineDictation();
         else await startLineDictation(index);
         return;
@@ -1225,15 +1245,17 @@
         return;
       }
       if (b.hasAttribute('data-dismiss-voice')) { voiceRecovery = null; voiceStatus = ''; render(); return; }
-      if (b.dataset.lineEnhance !== undefined) { await enhanceLine(Number(b.dataset.lineEnhance)); return; }
+      if (b.dataset.lineEnhance !== undefined) { await enhanceLine(b.dataset.lineEnhance === 'notes' ? 'notes' : Number(b.dataset.lineEnhance)); return; }
       if (b.dataset.lineStyle) { await proposeLine(b.dataset.lineStyle, 0); return; }
       if (b.hasAttribute('data-line-variation')) { if (lineAssist) await proposeLine(lineAssist.style, lineAssist.variation + 1); return; }
       if (b.hasAttribute('data-line-accept')) {
-        if (lineAssist?.proposal && state.items[lineAssist.index]) {
+        if (lineAssist?.proposal && state.id === lineAssist.draftId && typeof lineAssistText(lineAssist.index) === 'string') {
           rememberUndo();
-          state.items[lineAssist.index].description = lineAssist.proposal;
+          const notes = lineAssist.index === 'notes';
+          if (notes) state.notes = lineAssist.proposal;
+          else state.items[lineAssist.index].description = lineAssist.proposal;
           lineAssist = null; markDirty(); render(); void saveNow();
-          notice('Description acceptée.');
+          notice(notes ? 'Note acceptée.' : 'Description acceptée.');
         }
         return;
       }
@@ -1347,6 +1369,17 @@
         document.querySelector(`[data-payment="${state.payments.length - 1}"]`)?.focus();
         return;
       }
+      if (b.dataset.quantityStep !== undefined) {
+        const index = Number(b.dataset.line);
+        const input = document.querySelector(`[data-item="${index}"][data-key="quantity"]`);
+        if (!input || !state.items[index]) return;
+        const current = Number(String(input.value).replace(',', '.'));
+        const candidate = Math.round(((Number.isFinite(current) ? current : 0) + Number(b.dataset.quantityStep)) * 1000000) / 1000000;
+        const next = candidate > 0 ? candidate : current > 0 ? current : 1;
+        input.value = String(next).replace('.', ',');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
       if (b.dataset.removePayment !== undefined) {
         rememberUndo(); calendarField = null; calendarView = null;
         const index = Number(b.dataset.removePayment);
@@ -1409,6 +1442,7 @@
       }
       if (el.dataset.field) {
         rememberUndo(`${state.id}:field:${el.dataset.field}`);
+        if (el.dataset.field === 'contact') formatPhoneInput(el);
         state[el.dataset.field] = el.value;
         releaseVoiceField(voiceSession, el.dataset.field);
         releaseVoiceField(voiceRecovery?.session, el.dataset.field);

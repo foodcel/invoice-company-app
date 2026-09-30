@@ -3,6 +3,7 @@ import {
   pushGraphicsState, popGraphicsState, rectangle, clip, endPath,
 } from 'pdf-lib';
 import { paymentTotal, customerPayments } from './payments.js';
+import { formatPhone } from './phone.js';
 
 // This is the existing mockup artwork. Only its wood-grain symbol is clipped
 // into the PDF; the lettering in the PNG is never drawn.
@@ -274,7 +275,7 @@ function partyContent(draft, context) {
   const { normal, bold, labels } = context;
   const client = wrapText(draft.client, bold, 12, 225);
   const address = wrapText(draft.address, normal, 10, 225);
-  const contact = draft.contact?.trim() ? wrapText(`${labels.phone} ${draft.contact}`, normal, 10, 225) : [];
+  const contact = draft.contact?.trim() ? wrapText(`${labels.phone} ${formatPhone(draft.contact)}`, normal, 10, 225) : [];
   const email = draft.email?.trim() ? wrapText(`${labels.email} ${draft.email}`, normal, 10, 225) : [];
   const ship = draft.shipTo?.trim() ? wrapText(draft.shipTo, normal, 10, 225) : [];
   return { client, address, contact, email, ship };
@@ -347,7 +348,7 @@ function drawFlowDetails(doc, draft, context, initialPage, initialTop) {
     kind !== 'facture', context.language));
   field(labels.party, draft.client);
   field(labels.billingAddress, draft.address);
-  field(labels.clientPhone, draft.contact);
+  field(labels.clientPhone, formatPhone(draft.contact));
   field(labels.clientEmail, draft.email);
   field(labels.shipTo, draft.shipTo);
   field(labels.issuedBy, "Ébénisterie de l'Hermitage inc.\n68, chemin des guides\nRipon (Qc) J0V 1V0\n(819) 428-7690");
@@ -481,39 +482,50 @@ export async function createPdf(draft, { invoiceNumber = null, language = 'fr' }
   const totalsTop = 724 - totalsHeight(totals.deposit);
   if (cursor > totalsTop - 18) nextPage(false);
   const notes = String(draft.notes ?? '').trim();
-  if (notes) {
-    const lines = wrapText(notes, normal, 10.5, 249);
-    let at = 0;
-    while (at < lines.length) {
-      const noteTop = cursor + 19;
-      const capacity = Math.floor((713 - noteTop - 24) / NOTE_LINE) + 1;
-      if (capacity < 1) { nextPage(false); continue; }
-      drawText(page, at ? `${labels.note} · ${labels.continued}` : labels.note, LEFT, noteTop, bold, 9, brown);
-      const chunk = lines.slice(at, at + capacity);
-      drawLines(page, chunk, LEFT, noteTop + 19, normal, 10.5, NOTE_LINE, muted);
-      cursor = noteTop + 19 + chunk.length * NOTE_LINE;
-      at += chunk.length;
-      if (at < lines.length) nextPage(false);
-    }
-  }
+  const noteLines = notes ? wrapText(notes, normal, 10.5, 249) : [];
   const payments = customerPayments(draft);
-  if (payments.length) {
-    let at = 0;
-    while (at < payments.length) {
-      const paymentTop = cursor + 19;
-      const capacity = Math.floor((713 - paymentTop - 24) / 22);
-      if (capacity < 1) { nextPage(false); continue; }
-      drawText(page, at ? `${labels.payments} · ${labels.continued}` : labels.payments, LEFT, paymentTop, bold, 9, brown);
-      const chunk = payments.slice(at, at + capacity);
-      chunk.forEach((payment, index) => {
-        const y = paymentTop + 22 + index * 22;
+  // Like the preview's closing grid: measure the left column, then align its
+  // bottom with the final totals row. Long content continues in headed chunks.
+  const closingBottom = totalsTop + (totals.deposit > 0 ? 141 : 90);
+  let noteAt = 0, paymentAt = 0;
+  while (noteAt < noteLines.length || paymentAt < payments.length) {
+    const available = closingBottom - cursor - 19;
+    const chunks = [];
+    let height = 0;
+    if (noteAt < noteLines.length) {
+      const capacity = Math.max(0, Math.floor((available - 19 - 10.5) / NOTE_LINE) + 1);
+      const lines = noteLines.slice(noteAt, noteAt + capacity);
+      if (lines.length) {
+        chunks.push({ kind: 'notes', offset: 0, continued: noteAt > 0, lines });
+        height = 19 + (lines.length - 1) * NOTE_LINE + 10.5;
+        noteAt += lines.length;
+      }
+    }
+    if (noteAt === noteLines.length && paymentAt < payments.length) {
+      const offset = height ? height + 19 : 0;
+      const capacity = Math.max(0, Math.floor((available - offset - 22 - 10) / 22) + 1);
+      const rows = payments.slice(paymentAt, paymentAt + capacity);
+      if (rows.length) {
+        chunks.push({ kind: 'payments', offset, continued: paymentAt > 0, rows });
+        height = offset + 22 + (rows.length - 1) * 22 + 10;
+        paymentAt += rows.length;
+      }
+    }
+    if (!chunks.length) { nextPage(false); continue; }
+    const top = closingBottom - height;
+    for (const chunk of chunks) {
+      const sectionTop = top + chunk.offset;
+      const heading = chunk.kind === 'notes' ? labels.note : labels.payments;
+      drawText(page, chunk.continued ? `${heading} · ${labels.continued}` : heading, LEFT, sectionTop, bold, 9, brown);
+      if (chunk.kind === 'notes') {
+        drawLines(page, chunk.lines, LEFT, sectionTop + 19, normal, 10.5, NOTE_LINE, muted);
+      } else chunk.rows.forEach((payment, index) => {
+        const y = sectionTop + 22 + index * 22;
         drawText(page, payment.date ? displayDate(payment.date, true, language) : labels.paymentNoDate, LEFT, y, normal, 10, muted);
         drawRight(page, money(payment.amount, language), 291, y, normal, 10);
       });
-      cursor = paymentTop + 22 + chunk.length * 22;
-      at += chunk.length;
-      if (at < payments.length) nextPage(false);
     }
+    if (noteAt < noteLines.length || paymentAt < payments.length) nextPage(false);
   }
   drawTotals(page, context, totals);
   drawFooters(doc, context);

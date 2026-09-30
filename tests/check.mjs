@@ -1,4 +1,6 @@
 import './pdf.test.mjs';
+import './pdf-closing.test.mjs';
+import './phone.test.mjs';
 import './payments.test.mjs';
 import './editor-events.test.mjs';
 import './update-manifest.test.mjs';
@@ -6,4 +8,6 @@ import './voice-workflow.test.mjs';
 import './voice-capture.test.mjs';
 import './business-settings.test.mjs';
 import './email-export.test.mjs';
+import './email-refresh.test.mjs';
+import './notes-assist.test.mjs';
 import './email-check.mjs';

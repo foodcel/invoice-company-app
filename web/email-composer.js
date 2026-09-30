@@ -24,7 +24,7 @@ export function initialEmailDraft(draft, language = 'fr', settings = {}) {
   const en = language === 'en';
   const title = invoice ? (en ? 'Invoice' : 'Facture') : (en ? 'Quote' : 'Soumission');
   const number = invoice && draft.invoiceNumber ? ` n° ${draft.invoiceNumber}` : '';
-  return {
+  const model = {
     to: text(draft.email).trim() ? [text(draft.email)] : [],
     cc: invoice && text(settings.accountantEmail).trim() ? [settings.accountantEmail] : [],
     subject: `${title}${number}${draft.project ? ` — ${draft.project}` : ''}`,
@@ -32,6 +32,44 @@ export function initialEmailDraft(draft, language = 'fr', settings = {}) {
       `Bonjour${draft.client ? ` ${draft.client}` : ''},\n\nVous trouverez ${invoice ? 'la facture' : 'la soumission'} en pièce jointe.\nN’hésitez pas à me contacter pour toute question.\n\nBonne journée !`,
     ccTouched: false, undo: [], attachment: null, pdfStatus: 'pending', sendState: 'idle', attemptId: null,
   };
+  model.documentSource = { email: text(draft.email).trim(), subject: model.subject, body: model.body, pdf: emailPdfFingerprint(draft, language) };
+  return model;
+}
+
+function emailPdfFingerprint(draft, language) {
+  const fields = ['kind', 'invoiceNumber', 'project', 'date', 'validUntil', 'dueDate', 'client', 'address', 'shipTo', 'contact', 'email', 'notes', 'items', 'payments', 'deposit'];
+  return JSON.stringify([language, Object.fromEntries(fields.map(field => [field, draft[field] ?? null]))]);
+}
+
+/** Reconcile document defaults without discarding custom text or a submitted attempt. */
+export function restoreEmailDraft(rememberedDraft, draft, language = 'fr', pdfDraft = draft) {
+  const fresh = initialEmailDraft(draft, language);
+  fresh.documentSource.pdf = emailPdfFingerprint(pdfDraft, language);
+  if (!rememberedDraft) return fresh;
+  const model = structuredClone(rememberedDraft);
+  const previous = model.documentSource;
+  if (previous) {
+    const normalized = value => text(value).trim().toLowerCase();
+    if (normalized(previous.email) !== normalized(fresh.documentSource.email)) {
+      const oldIndex = model.to.findIndex(email => normalized(email) === normalized(previous.email));
+      const newEmail = fresh.documentSource.email;
+      const alreadyPresent = model.to.some((email, index) => index !== oldIndex && normalized(email) === normalized(newEmail));
+      if (oldIndex >= 0) model.to.splice(oldIndex, 1, ...(newEmail && !alreadyPresent ? [newEmail] : []));
+      else if (newEmail && !alreadyPresent) model.to.unshift(newEmail);
+    }
+    if (model.subject === previous.subject) model.subject = fresh.subject;
+    if (model.body === previous.body) model.body = fresh.body;
+    // Undo must not reintroduce obsolete generated greetings/subjects.
+    if (previous.subject !== fresh.subject || previous.body !== fresh.body) {
+      model.undo = model.undo.filter(entry => entry.subject !== previous.subject && entry.body !== previous.body);
+    }
+    if (previous.pdf !== fresh.documentSource.pdf) {
+      if (model.sendState === 'idle') Object.assign(model, { attachment: null, pdfStatus: 'pending', attemptId: null });
+      else model.documentChanged = true; // Keep original attempt/PDF and require explicit new-send confirmation.
+    }
+  }
+  model.documentSource = fresh.documentSource;
+  return model;
 }
 
 export function messageIssues(model, connected, signature = '') {
@@ -133,7 +171,7 @@ export function createSendFlow({ model, getSettings, invoke, preparePdf, newAtte
 
 export function prepareAnotherSend(model, confirmed = false) {
   if (!confirmed || !['accepted', 'uncertain'].includes(model.sendState)) return false;
-  Object.assign(model, { sendState: 'idle', attemptId: null, attachment: null, pdfStatus: 'pending' });
+  Object.assign(model, { sendState: 'idle', attemptId: null, attachment: null, pdfStatus: 'pending', documentChanged: false });
   return true;
 }
 
@@ -395,8 +433,7 @@ export function openEmailComposer(options) {
   const { invoke, draft, preparePdf, rewrite, onClose, onSent } = options;
   const language = options.language === 'en' ? 'en' : 'fr';
   const key = JSON.stringify([draft.id, draft.kind, language]);
-  const restored = remembered.has(key);
-  const model = structuredClone(remembered.get(key) || initialEmailDraft(draft, language));
+  const model = restoreEmailDraft(remembered.get(key), draft, language, options.pdfDraft || draft);
   if (model.attachment) model.attachment = attachmentMetadata(model.attachment);
   let settings = { connected: false, signature: DEFAULT_SIGNATURE }, closed = false, sending = false, rewriting = false, nested = null, pollTimer = null;
   const host = overlay();
@@ -489,7 +526,7 @@ export function openEmailComposer(options) {
     signature.textContent = settings.signature; signature.hidden = !settings.signature;
     fileName.textContent = model.attachment?.filename || options.filename || 'Document PDF';
     fileName.title = fileName.textContent;
-    pdfStatus.textContent = model.pdfStatus === 'saved' ? 'PDF enregistré sur cet ordinateur' : model.pdfStatus === 'failed' ? 'PDF non enregistré · nouvel essai possible' : sending ? 'Enregistrement du PDF…' : 'Sera enregistré avant l’envoi';
+    pdfStatus.textContent = model.documentChanged ? 'PDF du précédent envoi · le document a été modifié' : model.pdfStatus === 'saved' ? 'PDF enregistré sur cet ordinateur' : model.pdfStatus === 'failed' ? 'PDF non enregistré · nouvel essai possible' : sending ? 'Enregistrement du PDF…' : 'Sera enregistré avant l’envoi';
     const blocked = sending || rewriting;
     for (const node of panel.querySelectorAll('button,input,textarea,a')) {
       if (node.tagName === 'A') { node.tabIndex = blocked ? -1 : 0; node.style.pointerEvents = blocked ? 'none' : ''; }
@@ -510,7 +547,7 @@ export function openEmailComposer(options) {
   function updateSettings(value) {
     if (closed) return;
     settings = { ...value, signature: typeof value.signature === 'string' ? value.signature : DEFAULT_SIGNATURE };
-    if (!restored && !model.ccTouched && draft.kind === 'facture') {
+    if (!model.ccTouched && draft.kind === 'facture') {
       model.cc = text(value.accountantEmail).trim() ? [value.accountantEmail] : []; renderRecipients('cc');
     }
     sync();

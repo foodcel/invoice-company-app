@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { paymentTotal } from '../web/payments.js';
+import { formatPhoneInput } from '../web/phone.js';
 
 // Execute the production listeners, with native I/O and rendering isolated.
 // This checks event routing and state effects, not a native WebView click-through.
@@ -20,7 +21,8 @@ function editor(source) {
     saveNow: async () => { calls.saves++; }, render: () => calls.render++,
     releaseVoiceField() {}, releaseVoiceItem() {}, sync() {}, paintValidation() {},
     deposit: () => paymentTotal(state), notice() {},
-    composeEmail: async () => calls.mail++, showMailSettings: async () => calls.mailSettings++
+    composeEmail: async () => calls.mail++, showMailSettings: async () => calls.mailSettings++,
+    formatPhoneInput, Event: class { constructor(type) { this.type = type; } }
   };
   vm.runInNewContext(source.slice(start, end), context);
   const input = (dataset, value) => listeners.input({ target: { dataset, value, tagName: 'INPUT', hasAttribute: () => false } });
@@ -78,4 +80,23 @@ test('production Send and Outlook settings route once and respect active voice/e
   probe.context.voiceSession = { stopping: false };
   await probe.click('data-send-email');
   assert.equal(probe.calls.mail, 1);
+});
+
+test('quantity arrows update totals through normal input routing and remain undoable and dirty', async () => {
+  const source = await readFile(new URL('../web/app.js', import.meta.url), 'utf8');
+  const probe = editor(source);
+  const control = { value: '1', dataset: { item: '0', key: 'quantity' }, tagName: 'INPUT', hasAttribute: () => false,
+    dispatchEvent: () => probe.input(control.dataset, control.value) };
+  probe.context.document.querySelector = selector => selector.includes('quantity') ? control : null;
+  await probe.click('', { quantityStep: '1', line: '0' });
+  assert.equal(probe.state.items[0].quantity, '2');
+  await probe.click('', { quantityStep: '-1', line: '0' });
+  assert.equal(probe.state.items[0].quantity, '1');
+  await probe.click('', { quantityStep: '-1', line: '0' });
+  assert.equal(probe.state.items[0].quantity, '1', 'Quantity never becomes zero');
+  control.value = '1,5';
+  await probe.click('', { quantityStep: '-1', line: '0' });
+  assert.equal(probe.state.items[0].quantity, '0,5', 'Manual fractional quantity stays supported');
+  assert.equal(probe.calls.undo, 4);
+  assert.equal(probe.calls.dirty, 4);
 });
