@@ -1,0 +1,11 @@
+{
+  "installerSha256": "8a792f5a38b1255fee562a97c29a56f2478663f82975097a38f613f0ae7f0504",
+  "installerDigestMatches": true,
+  "releaseUrl": "https://github.com/foodcel/invoice-company-app/releases/tag/v0.1.19",
+  "verifiedAt": "2026-09-30T10:13:50.8735172+00:00",
+  "latestManifestMatches": true,
+  "publicStable": true,
+  "signatureMatches": true,
+  "installerSize": 822176649,
+  "version": "0.1.19"
+}
