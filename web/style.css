@@ -295,20 +295,27 @@
     .v1 .doc1 .paper-table td { padding: 10px 6px; vertical-align: top; line-height: 1.45; }
     .v1 .doc1 .paper-table th:nth-child(2), .v1 .doc1 .paper-table td:nth-child(2) { text-align: center; }
     .v1 .doc1 .paper-table th:nth-child(3), .v1 .doc1 .paper-table td:nth-child(3) { text-align: right; }
-    .doc1-closing { display: grid; grid-template-columns: 1fr 48%; gap: 20px; align-items: end; margin-top: auto; padding-top: 18px; flex: none; }
+    .doc1-closing { display: grid; grid-template-columns: 247fr 269fr; gap: 12px; align-items: stretch; margin-top: auto; padding-top: 18px; flex: none; }
     .doc1-note { grid-column: 1; }
-    .doc1-extras { grid-column: 1; min-width: 0; }
-    .doc1-payments { margin-top: 15px; }
+    .doc1-extras { grid-column: 1; min-width: 0; border: 1px solid #d4d9d6; border-radius: 7px; padding: 16px 14px; }
+    .doc1-extras:has([data-notes-block][hidden]):has([data-payment-breakdown][hidden]) { visibility: hidden; }
+    .doc1-payments { margin-top: 0; }
+    .doc1-note:not([hidden]) + .doc1-payments:not([hidden]) { margin-top: 18px; border-top: 1px solid #d4d9d6; padding-top: 16px; }
     .doc1-payments b { display: block; margin-bottom: 8px; color: #6f503f; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
-    .payment-detail { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; color: #68736e; font-size: 11px; }
+    .payment-detail { display: flex; justify-content: space-between; gap: 10px; margin-top: 0; padding: 8px 0 8px 17px; color: #68736e; font-size: 11px; position: relative; }
+    .payment-detail::before { content: ''; position: absolute; left: 5px; top: 0; bottom: 0; width: 1px; background: #d4d9d6; }
+    .payment-detail::after { content: ''; position: absolute; left: 2px; top: 13px; width: 6px; height: 6px; border-radius: 50%; background: #737a77; box-shadow: 0 0 0 1px white; }
+    .payment-detail:nth-child(2)::before { top: 16px; }
+    .payment-detail:last-child::before { bottom: calc(100% - 16px); }
     .payment-detail strong { white-space: nowrap; font-weight: 600; color: #23302c; }
     .doc1-note b { color: #6f503f; display: block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
     .doc1-note p { margin: 9px 0 0; color: #68736e; font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
     .v1 .doc1 .paper-table { flex: none; }
-    .v1 .doc1 .paper-totals { grid-column: 2; align-self: end; width: 100%; margin: 0; font-size: 11px; }
-    .v1 .doc1 .paper-totals .grand { border-color: #6f503f; font-size: 16px; }
+    .v1 .doc1 .paper-totals { grid-column: 2; align-self: stretch; width: 100%; margin: 0; font-size: 11px; border: 1px solid #d4d9d6; border-radius: 7px; padding: 12px 14px; display: flex; flex-direction: column; }
+    .v1 .doc1 .paper-totals .grand { border-color: #d4d9d6; font-size: 14px; margin-top: 10px; padding-top: 11px; }
+    .v1 .doc1 .paper-totals .balance { margin-top: auto; border: 0; border-radius: 5px; padding: 10px 12px; background: #f6f7f6; font-size: 14px; }
     .v1 .doc1 .paper-totals div { padding: 5px 0; }
-    .v1 .doc1 .paper-totals .balance { border-top: 1px solid #d9dfda; font-weight: 800; }
+    .v1 .doc1 .paper-totals .balance { font-weight: 800; }
     .invoice-number { position: relative; min-width: 0; height: 44px; display: flex; align-items: center; margin: 0; padding: 4px 7px 4px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--soft); }
     .number-row { width: 100%; min-width: 0; display: flex; align-items: center; gap: 5px; }
     .number-prefix { flex: none; color: var(--muted); font-size: 13px; font-weight: 700; }

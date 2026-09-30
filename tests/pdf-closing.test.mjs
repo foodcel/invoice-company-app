@@ -56,10 +56,10 @@ function checkBounds(pages) {
   }
 }
 
-test('saved PDF bottom-aligns notes and payments beside totals regardless of table height', async () => {
+test('saved PDF aligns the two-panel recap regardless of table height and language', async () => {
   await mkdir(new URL('../test-output/', import.meta.url), { recursive: true });
   for (const language of ['fr', 'en']) for (const [notes, payments] of [['NOTE001 confirmed.', 1], ['NOTE001 confirmed.', 0], ['', 2]]) {
-    let previousBottom;
+    let previousTop;
     for (const items of [1, 2]) {
       const bytes = await createPdf(draftFor(notes, payments, items), { invoiceNumber: 2060, language });
       const pages = await inspect(bytes);
@@ -67,12 +67,14 @@ test('saved PDF bottom-aligns notes and payments beside totals regardless of tab
       const rows = pages[0];
       const extras = rows.filter(row => row.x < 300 && (row.text.startsWith('NOTE001') || /^(?:\d{2}\/09\/2026|2026-09-\d{2})$/.test(row.text)));
       assert.ok(extras.length > 0);
-      const bottom = Math.max(...extras.map(row => row.bottom));
+      const heading = rows.find(row => row.text === (notes ? (language === 'fr' ? 'NOTE POUR LE CLIENT' : 'NOTE FOR CUSTOMER') : (language === 'fr' ? 'PAIEMENTS REÇUS' : 'PAYMENTS RECEIVED')));
       const finalTotal = rows.find(row => row.text === (payments ? (language === 'fr' ? 'Balance' : 'Balance due') : language === 'fr' ? 'Total avec taxes' : 'Total incl. tax'));
       assert.ok(finalTotal, 'Final totals label must exist');
-      assert.ok(Math.abs(bottom - finalTotal.bottom) <= 2, `Closing block is not bottom-aligned: ${bottom} vs ${finalTotal.bottom}`);
-      if (previousBottom !== undefined) assert.ok(Math.abs(bottom - previousBottom) < .1, 'Adding work must not move closing block upward');
-      previousBottom = bottom;
+      const subtotal = rows.find(row => row.text === (language === 'fr' ? 'Sous-total' : 'Subtotal'));
+      assert.ok(Math.abs(heading.top - subtotal.top) <= 2, 'Two panels start at the same height');
+      assert.ok(finalTotal.top > subtotal.top);
+      if (previousTop !== undefined) assert.ok(Math.abs(heading.top - previousTop) < .1, 'Adding work must not move recap upward');
+      previousTop = heading.top;
       checkBounds(pages);
       if (notes && payments && items === 1) await writeFile(new URL(`../test-output/closing-${language}.pdf`, import.meta.url), bytes);
     }
@@ -86,11 +88,11 @@ test('closing pagination preserves every note and date/amount pair above the foo
     const pages = await inspect(bytes);
     checkBounds(pages);
     const rows = pages.flat();
-    const printedNotes = rows.filter(row => /^NOTE\d{3}/.test(row.text)).map(row => row.text);
-    assert.deepEqual(printedNotes, notes ? notes.split('\n') : []);
+    const printedNotes = rows.filter(row => row.x === 56 && !row.text.startsWith('NOTE POUR') && (row.text.startsWith('NOTE') || row.text.startsWith('END') || row.text.startsWith('confirmed'))).map(row => row.text).join(' ');
+    assert.equal(printedNotes.replace(/\s+/g,' ').trim(), notes.replace(/\s+/g,' ').trim());
     const printedPayments = [];
-    for (const page of pages) for (const row of page.filter(row => row.x === 42 && /^\d{2}\/09\/2026$/.test(row.text))) {
-      const amount = page.find(other => other.x > 200 && other.right <= 292 && Math.abs(other.top - row.top) < .1);
+    for (const page of pages) for (const row of page.filter(row => row.x === 73 && /^\d{2}\/09\/2026$/.test(row.text))) {
+      const amount = page.find(other => other.x > 200 && Math.abs(other.top - row.top) < .1);
       assert.ok(amount, `Payment date ${row.text} has no matching amount`);
       printedPayments.push([row.text, amount.text]);
     }
@@ -98,8 +100,63 @@ test('closing pagination preserves every note and date/amount pair above the foo
     assert.equal(rows.filter(row => row.text === 'Sous-total').length, 1, 'Totals appear once');
     assert.ok(pages.at(-1).some(row => row.text === 'Sous-total'), 'Totals on final page');
     for (const page of pages) for (const row of page.filter(row => /^(NOTE POUR LE CLIENT|PAIEMENTS REÇUS)/.test(row.text))) {
-      assert.ok(page.some(other => other.top > row.top && (/^NOTE\d{3}/.test(other.text) || /^\d{2}\/09\/2026$/.test(other.text))), 'Headings stay with content');
+      assert.ok(page.some(other => other.top > row.top && (/^(NOTE\d{3}|Note détaillée)/.test(other.text) || /^\d{2}\/09\/2026$/.test(other.text))), 'Headings stay with content');
     }
     if (paymentsCount === 90) await writeFile(new URL('../test-output/closing-long.pdf', import.meta.url), bytes);
   }
+});
+
+test('every date/amount pair survives English and French quote/invoice histories, including max rows', async () => {
+  for (const language of ['fr','en']) for (const kind of ['soumission','facture']) {
+    const draft = draftFor(Array.from({length:70},(_,i)=>`NOTE${String(i).padStart(3,'0')}: A confirmed detail.`).join('\n'), 500);
+    draft.kind = kind;
+    const pages = await inspect(await createPdf(draft,{invoiceNumber:2060,language}));
+    checkBounds(pages);
+    const rows = pages.flat(), printed = [];
+    for(const page of pages) for(const row of page.filter(row=>row.x===73)) {
+      const amount=page.find(other=>other.x>200 && Math.abs(other.top-row.top)<.1);
+      assert.ok(amount); printed.push([row.text,amount.text]);
+    }
+    const formatter=new Intl.NumberFormat(language==='en'?'en-CA':'fr-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const money=n=>formatter.format(n).replace(/[\u00a0\u202f]/g,' ')+(language==='fr'?' $':'');
+    assert.deepEqual(printed,draft.payments.map(p=>[language==='en'?p.date:p.date.split('-').reverse().join('/'),language==='en'?'$'+money(Number(p.amount)):money(Number(p.amount))]));
+    assert.equal(rows.filter(r=>r.text===(language==='en'?'Subtotal':'Sous-total')).length,1);
+    for(let i=0;i<70;i++) assert.equal(rows.filter(r=>r.text.startsWith(`NOTE${String(i).padStart(3,'0')}:`)).length,1);
+    const final=pages.at(-1); assert.ok(final.some(r=>r.text.startsWith(language==='en'?'Detailed note : pages':'Note détaillée : pages')));
+    assert.ok(final.some(r=>r.text.startsWith(language==='en'?'Earlier payments : pages':'Versements précédents : pages')));
+  }
+});
+
+test('near-full recap moves below continuation header, with or without notes/payments', async () => {
+  for(const lines of [0,35,38,39,40,41,42,44,50]) {
+    const draft=draftFor(Array.from({length:lines},(_,i)=>`NOTE${i} brief.`).join('\n'),0,18);
+    const pages=await inspect(await createPdf(draft,{invoiceNumber:2060}));
+    checkBounds(pages);
+    assert.ok(pages.at(-1).filter(r=>r.x===56).every(r=>r.top>=82),'Recap and continuation details below continued header');
+  }
+});
+
+test('saved-PDF observer detects clipped and overlapping text', async () => {
+  const pages=await inspect(await createPdf(draftFor(),{invoiceNumber:2060}));
+  checkBounds(pages);
+  const clipped=structuredClone(pages); clipped[0][0].bottom=790;
+  assert.throws(()=>checkBounds(clipped),/Footer collision/);
+  const overlapping=structuredClone(pages); overlapping[0].push({...overlapping[0][0]});
+  assert.throws(()=>checkBounds(overlapping),/Overlapping text/);
+});
+
+test('large amounts fit beside the longer English balance label', async () => {
+  const draft = draftFor('Confirmed details.', 3);
+  draft.kind = 'soumission';
+  draft.payments = [{amount:'1000000000',date:''},{amount:'1000000000',date:''},{amount:'1000000000',date:''}];
+  checkBounds(await inspect(await createPdf(draft,{language:'en'})));
+});
+
+test('a long work description retains every word once across continuation pages', async () => {
+  const draft = draftFor('',0);
+  draft.items[0].description = Array.from({length:100},(_,i)=>`STEP${i}: Fabrication et ajustement selon les dimensions confirmées. END${i}.`).join('\n');
+  const pages = await inspect(await createPdf(draft,{invoiceNumber:2060}));
+  checkBounds(pages);
+  const text = pages.flat().filter(r=>r.x===48 && !r.text.startsWith('LIGNE') && r.text!=='DESCRIPTION').map(r=>r.text).join(' ').replace(/\s+/g,' ').trim();
+  assert.equal(text,draft.items[0].description.replace(/\s+/g,' ').trim());
 });

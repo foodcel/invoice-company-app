@@ -1,0 +1,92 @@
+
+> invoice-company-app@0.1.19 check
+> node tests/check.mjs
+
+Voice merge: pass
+ok 1 - invoice-only accountant defaults, no invented recipient, French and English messages
+ok 2 - multiple recipients validated independently; whitespace trimmed, empty/invalid rows rejected
+ok 3 - recipient/message limits and connection are real preflight failures
+ok 4 - AI applies supplied subject/body and undo restores both, including stacked rewrites
+ok 5 - archived PDF metadata is a copied immutable snapshot, invalid paths/filenames fail
+ok 6 - PDF preview consumes real immutable bytes and does not accept pretend content
+ok 7 - one complete settings payload, GUID/email validation, explicit blank signature retained
+ok 8 - preflight prevents export and native send, including disconnected account
+ok 9 - final Send archives first, uses final native ID/path, suppresses concurrent submissions, snapshots routing
+ok 10 - PDF failures never submit; synchronous export failure can be corrected and retried
+ok 11 - ambiguous provider error preserves typed recipients, PDF and attempt, and cannot resubmit after restoring draft
+ok 12 - a receipt for another attempt is uncertain, never falsely accepted
+ok 13 - a new send intent requires confirmation and never resets an in-flight attempt
+mutation caught - preflight bypass (helper/transport rung)
+mutation caught - PDF export bypass (helper/transport rung)
+ok 14 - negative probes go RED for injected preflight bypass and PDF export bypass
+email checks passed (14 meaningful helper/transport checks; no browser or provider claims)
+✔ quote amounts and printable Letter PDF (83.6351ms)
+✔ long invoice paginates without a guessed line limit (72.8967ms)
+✔ one long work description continues across Letter pages (19.4151ms)
+✔ customer output rejects missing facts and creates an English invoice copy (16.1762ms)
+✔ English quote keeps the French numeric facts on Letter paper (15.6665ms)
+✔ dated payments preserve taxes and produce French and English customer copies (27.4947ms)
+✔ long notes and 90 dated payments paginate on Letter pages (31.1511ms)
+✔ saved PDF aligns the two-panel recap regardless of table height and language (146.3894ms)
+✔ closing pagination preserves every note and date/amount pair above the footer (102.3105ms)
+✔ every date/amount pair survives English and French quote/invoice histories, including max rows (343.0426ms)
+✔ near-full recap moves below continuation header, with or without notes/payments (142.0105ms)
+✔ saved-PDF observer detects clipped and overlapping text (15.1522ms)
+✔ large amounts fit beside the longer English balance label (12.1375ms)
+✔ a long work description retains every word once across continuation pages (22.1452ms)
+✔ phone formatting handles Canadian numbers, country prefix and partial input (0.099ms)
+✔ phone formatting keeps insertion caret beside its digit (0.2127ms)
+✔ legacy deposits remain undated and explicit payment rows never double count or resurrect them (0.1076ms)
+✔ payments round separately, ignore unused rows, and reject invalid or incomplete entries (0.2497ms)
+✔ production form listeners preserve typing and route payment Add/Remove clicks (3.2772ms)
+✔ production Send and Outlook settings route once and respect active voice/editor overlays (0.7741ms)
+✔ quantity arrows update totals through normal input routing and remain undoable and dirty (0.9439ms)
+✔ release manifest points at the exact signed Windows installer (46.8279ms)
+✔ release manifest rejects an installer name GitHub may rewrite (37.1891ms)
+✔ emits a 5s mono 16 kHz PCM WAV and flushes the final audio on stop (5.0797ms)
+✔ cancel releases the microphone without delivering residual audio (0.2216ms)
+✔ a rejected segment callback reports the error and cleans up automatically (0.4044ms)
+✔ local streaming shows partial French text, delivers final utterances and flushes audio (32.8961ms)
+✔ document edits refresh default recipient, greeting and subject while preserving additional recipients and CC (0.6745ms)
+✔ custom email text survives source changes, stale defaults do not return through Undo, and duplicate recipient is avoided (0.2059ms)
+✔ selected English PDF changes invalidate an unsent archive even if French source stays unchanged (0.1338ms)
+✔ source edits preserve accepted/uncertain attempts until an explicitly confirmed new send (0.6413ms)
+✔ email export creates a real durable PDF receipt before mail can use it, including prior-copy case (27.6787ms)
+✔ failed PDF export rejects email preparation and leaves invoice unissued (29.1922ms)
+✔ incomplete documents cannot produce email attachments (0.4789ms)
+✔ Production Notes markup wires discreet controls to the original field with an explicit label (0.4926ms)
+✔ Notes proposal uses real command contract, stays inline and editable, and accepts only Notes (1.7957ms)
+✔ Notes styles and another version preserve original source; X restores exact whitespace (0.6619ms)
+✔ Notes microphone uses local speech, toggles stop, and rewrites original plus final transcript (0.968ms)
+✔ X cancels capture and ignores subsequent speech; manual Notes typing validates and autosaves normally (0.5845ms)
+✔ AI and microphone failures preserve Notes and expose real failure with recoverable transcript (1.3035ms)
+✔ Closing pending AI ignores late results and does not overwrite a subsequent manual edit (0.5795ms)
+✔ Closing during microphone startup cancels the late controller and prevents a second recording (0.6519ms)
+✔ Unavailable AI, empty Notes, and a changed draft never silently accept (0.694ms)
+✔ Shared work-line assist still routes only its description for AI and microphone (0.7109ms)
+✔ Negative control catches broken Notes routing in an isolated source copy (1.3754ms)
+✔ Business settings show only subscription providers and a private workspace token field (0.6878ms)
+✔ ChatGPT settings expose sign-in without any credential field or unsupported login (0.4987ms)
+✔ pending and connected ChatGPT states expose the correct controls (1.148ms)
+✔ opening settings and choosing ChatGPT never start a login automatically (1.2409ms)
+✔ explicit ChatGPT login adopts returned settings and opens the browser through a native opaque attempt (0.6505ms)
+✔ a login result without an attempt ID does not open a browser (0.5264ms)
+✔ refresh, cancellation and disconnect adopt native settings results through production clicks (0.6349ms)
+✔ login failures and a rejected native URL open recover without losing pending state (1.0101ms)
+✔ refresh, cancellation, disconnect and provider failures preserve settings and release busy state (1.9141ms)
+✔ Business readiness requires its own credential, not a ChatGPT subscription (0.6653ms)
+✔ ChatGPT readiness requires its own subscription credential and rejects legacy providers (0.5711ms)
+✔ only Business can save or remove a token, and saved credentials are never rendered (1.0704ms)
+✔ empty, unconfirmed or failed Business token changes keep actionable feedback (0.539ms)
+✔ connection test preserves an unsaved replacement and never tests the previous credential (0.5455ms)
+✔ successful connection feedback is escaped and styled separately from red errors (1.2691ms)
+✔ busy settings ignore overlapping actions (0.7141ms)
+✔ native authorization errors are visible and escaped when refreshing settings (0.5126ms)
+ℹ tests 62
+ℹ suites 0
+ℹ pass 62
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1271.8672

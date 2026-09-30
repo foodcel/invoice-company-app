@@ -17,7 +17,6 @@ const RIGHT = 570;
 const FOOTER_TOP = 738;
 const ITEM_BOTTOM = 715;
 const ITEM_LINE = 14;
-const NOTE_LINE = 15;
 
 const ink = rgb(0.15, 0.19, 0.18);
 const brown = rgb(0.43, 0.31, 0.25);
@@ -33,6 +32,7 @@ const LABELS = {
       description: 'DESCRIPTION', quantity: 'QTÉ', unitPrice: 'PRIX UNITAIRE', amount: 'MONTANT',
       line: 'LIGNE', continued: 'SUITE', subtotal: 'Sous-total',
       gst: 'TPS (5 %)', qst: 'TVQ (9,975 %)', total: 'Total avec taxes',
+      noteDetails: 'Note détaillée', previousPayments: 'Versements précédents',
       note: 'NOTE POUR LE CLIENT', noDate: 'Aucune', paymentNoDate: 'Date non précisée', invoiceNumber: 'Facture n°',
       gstId: 'TPS', qstId: 'TVQ', subject: 'Document client',
     },
@@ -53,6 +53,7 @@ const LABELS = {
       description: 'DESCRIPTION', quantity: 'QTY', unitPrice: 'UNIT PRICE', amount: 'AMOUNT',
       line: 'LINE', continued: 'CONTINUED', subtotal: 'Subtotal',
       gst: 'GST (5%)', qst: 'QST (9.975%)', total: 'Total incl. tax',
+      noteDetails: 'Detailed note', previousPayments: 'Earlier payments',
       note: 'NOTE FOR CUSTOMER', noDate: 'None', paymentNoDate: 'Date not specified', invoiceNumber: 'Invoice no.',
       gstId: 'GST', qstId: 'QST', subject: 'Customer document',
     },
@@ -384,25 +385,103 @@ function drawItem(page, context, item, lines, top, showNumbers, continuationLine
   return top + height;
 }
 
-function totalsHeight(deposit) { return deposit > 0 ? 143 : 100; }
+function pageReference(label, first, last, language) {
+  const range = first === last ? `page ${first}` : language === 'en' ? `pages ${first}-${last}` : `pages ${first} à ${last}`;
+  return `${label} : ${range}.`;
+}
 
-function drawTotals(page, context, totals) {
+// Keep the recap together. When its supporting details exceed one Letter page,
+// flow those details at full width and reference them from the final panels.
+function drawTimelineClosing(doc, initialPage, initialCursor, draft, context, totals) {
   const { normal, bold, labels, language } = context;
-  const x = 331;
-  const top = 724 - totalsHeight(totals.deposit);
-  const row = (label, value, y, font = normal, size = 11) => {
-    drawText(page, label, x, y, font, size);
-    drawRight(page, money(value, language), RIGHT, y, font, size);
+  const gray = rgb(.42,.45,.44), border = rgb(.83,.85,.84);
+  const light = rgb(.965,.97,.965), white = rgb(1,1,1);
+  let page = initialPage, cursor = initialCursor;
+  const next = () => { page = doc.addPage([PAGE_W,PAGE_H]); cursor = drawHeader(page,context,false); };
+  const box = (x,top,w,h,r=7,color=white) => page.drawSvgPath(`M ${r} 0 H ${w-r} Q ${w} 0 ${w} ${r} V ${h-r} Q ${w} ${h} ${w-r} ${h} H ${r} Q 0 ${h} 0 ${h-r} V ${r} Q 0 0 ${r} 0 Z`,{x,y:PAGE_H-top,color,borderColor:border,borderWidth:.7});
+  const text = (s,x,t,size=10,font=normal,color=ink) => drawText(page,s,x,t,font,size,color);
+  const right = (s,x,t,size=10,font=normal,width=120,color=ink) => {
+    const fitted = Math.min(size, width / font.widthOfTextAtSize(pdfText(s,font),1));
+    drawRight(page,s,x,t,font,fitted,color);
   };
-  row(labels.subtotal, totals.subtotal, top);
-  row(labels.gst, totals.tps, top + 22);
-  row(labels.qst, totals.tvq, top + 44);
-  drawRule(page, top + 70, x, RIGHT, brown, 1.5);
-  row(labels.total, totals.total, top + 77, bold, 13);
-  if (totals.deposit > 0) {
-    row(labels.deposit, totals.deposit, top + 104);
-    drawRule(page, top + 124, x, RIGHT, rule, 0.8);
-    row(labels.balance, totals.balance, top + 130, bold, 11);
+  const line = (x1,x2,t) => drawRule(page,t,x1,x2,border,.6);
+  const allPayments = customerPayments(draft);
+  const originalNotes = String(draft.notes || '').trim() ? wrapText(draft.notes,normal,10,219) : [];
+  let notes = originalNotes, payments = allPayments, paymentPointer = '';
+  const leftHeight = () => 28 + (notes.length ? 18 + notes.length*14 + 18 : 0)
+    + (payments.length ? 18 + payments.length*24 : 0) + (paymentPointer ? 28 : 0);
+  // 624pt leaves space below the 82pt continued header and above the tax footer.
+  if (leftHeight() > 624) {
+    // Oversized supporting details flow onto readable full-width pages.
+    // The final two-panel recap references them and keeps the last payments.
+    if (cursor + 82 > 715) next();
+    else cursor += 22;
+    let notesFirst = 0, notesLast = 0, paymentsFirst = 0, paymentsLast = 0;
+    if (String(draft.notes || '').trim()) {
+      const fullLines = wrapText(draft.notes,normal,10.5,500);
+      notesFirst = doc.getPageCount();
+      text(labels.note,LEFT+14,cursor+8,9,bold,gray); cursor += 31;
+      for (const s of fullLines) {
+        if (cursor+14 > 715) { next(); text(`${labels.note} · ${labels.continued}`,LEFT+14,cursor+8,9,bold,gray); cursor += 31; }
+        text(s,LEFT+14,cursor,10.5); cursor += 15;
+      }
+      notesLast = doc.getPageCount(); cursor += 25;
+    }
+    const previous = allPayments.slice(0,Math.max(0,allPayments.length-3));
+    if (previous.length) {
+      if(cursor+60 > 715) next();
+      paymentsFirst = doc.getPageCount();
+      text(labels.payments,LEFT+14,cursor+8,9,bold,gray); cursor += 35;
+      let lastDot = null;
+      for (const payment of previous) {
+        if (cursor+24 > 715) { next(); text(`${labels.payments} · ${labels.continued}`,LEFT+14,cursor+8,9,bold,gray); cursor += 35; lastDot = null; }
+        const dotY = PAGE_H-cursor-5;
+        if(lastDot !== null) page.drawLine({start:{x:LEFT+19,y:lastDot},end:{x:LEFT+19,y:dotY},thickness:1,color:border});
+        page.drawCircle({x:LEFT+19,y:dotY,size:3,color:gray,borderColor:white,borderWidth:1});
+        text(payment.date ? displayDate(payment.date,true,language) : labels.paymentNoDate,LEFT+31,cursor,10,normal,gray);
+        right(money(payment.amount,language),RIGHT-14,cursor,10,bold,300);
+        lastDot = dotY; cursor += 24;
+      }
+      paymentsLast = doc.getPageCount(); cursor += 20;
+    }
+    notes = notesFirst ? [pageReference(labels.noteDetails, notesFirst, notesLast, language)] : [];
+    payments = allPayments.slice(-3);
+    paymentPointer = paymentsFirst ? pageReference(labels.previousPayments, paymentsFirst, paymentsLast, language) : '';
+  }
+  const hasPayments = payments.length > 0;
+  const height = Math.max(hasPayments ? 202 : 163,leftHeight());
+  let top = 724-height;
+  if (cursor > top-12) { next(); top = cursor+12; }
+  if (notes.length || hasPayments) box(42,top,247,height);
+  box(301,top,269,height);
+  let leftTop = top+16;
+  if(notes.length) {
+    text(labels.note,56,leftTop,8.5,bold,gray); leftTop += 19;
+    notes.forEach(s=>{ text(s,56,leftTop,10,normal,gray); leftTop += 14; });
+    if(hasPayments) { line(56,275,leftTop+9); leftTop += 23; }
+  }
+  if(hasPayments) {
+    text(labels.payments,56,leftTop,8.5,bold,gray); leftTop += 22;
+    if(paymentPointer) { text(paymentPointer,56,leftTop,9,normal,gray); leftTop += 26; }
+    const firstDot=PAGE_H-leftTop-5, lastDot=firstDot-(payments.length-1)*24;
+    page.drawLine({start:{x:61,y:firstDot},end:{x:61,y:lastDot},thickness:1,color:border});
+    payments.forEach((payment,i)=>{
+      const t=leftTop+i*24;
+      page.drawCircle({x:61,y:PAGE_H-t-5,size:3,color:gray,borderColor:white,borderWidth:1});
+      text(payment.date ? displayDate(payment.date,true,language) : labels.paymentNoDate,73,t,10,normal,gray);
+      right(money(payment.amount,language),275,t,10,bold,112);
+    });
+  }
+  const rows = [[labels.subtotal,totals.subtotal],[labels.gst,totals.tps],[labels.qst,totals.tvq]];
+  rows.forEach(([label,amount],i)=>{text(label,315,top+17+i*23,10,normal,gray);right(money(amount,language),556,top+17+i*23);});
+  line(315,556,top+90);
+  text(labels.total,315,top+102,11.5,bold);right(money(totals.total,language),556,top+102,12,bold,109);
+  if(totals.deposit>0) {
+    text(labels.deposit,315,top+134,10,normal,gray);right(money(totals.deposit,language),556,top+134);
+    box(314,top+height-51,243,37,5,light);
+    text(labels.balance,326,top+height-39,10.5,bold);
+    const balanceWidth = 545 - 326 - bold.widthOfTextAtSize(labels.balance,10.5) - 12;
+    right(money(totals.balance,language),545,top+height-42,16,bold,balanceWidth);
   }
 }
 
@@ -473,61 +552,16 @@ export async function createPdf(draft, { invoiceNumber = null, language = 'fr' }
       const continuationLine = at > 0 ? item.lineNumber : null;
       const capacity = Math.floor((ITEM_BOTTOM - cursor - 16 - (continuationLine === null ? 0 : 17)) / ITEM_LINE);
       if (capacity < 1) { nextPage(); continue; }
-      const chunk = lines.slice(at, at + capacity);
+      let count = Math.min(capacity, lines.length - at);
+      const remaining = lines.length - at - count;
+      if (remaining > 0 && remaining < 3 && count > 3) count -= 3 - remaining;
+      const chunk = lines.slice(at, at + count);
       cursor = drawItem(page, context, item, chunk, cursor, at === 0, continuationLine);
       at += chunk.length;
       if (at < lines.length) nextPage();
     }
   }
-  const totalsTop = 724 - totalsHeight(totals.deposit);
-  if (cursor > totalsTop - 18) nextPage(false);
-  const notes = String(draft.notes ?? '').trim();
-  const noteLines = notes ? wrapText(notes, normal, 10.5, 249) : [];
-  const payments = customerPayments(draft);
-  // Like the preview's closing grid: measure the left column, then align its
-  // bottom with the final totals row. Long content continues in headed chunks.
-  const closingBottom = totalsTop + (totals.deposit > 0 ? 141 : 90);
-  let noteAt = 0, paymentAt = 0;
-  while (noteAt < noteLines.length || paymentAt < payments.length) {
-    const available = closingBottom - cursor - 19;
-    const chunks = [];
-    let height = 0;
-    if (noteAt < noteLines.length) {
-      const capacity = Math.max(0, Math.floor((available - 19 - 10.5) / NOTE_LINE) + 1);
-      const lines = noteLines.slice(noteAt, noteAt + capacity);
-      if (lines.length) {
-        chunks.push({ kind: 'notes', offset: 0, continued: noteAt > 0, lines });
-        height = 19 + (lines.length - 1) * NOTE_LINE + 10.5;
-        noteAt += lines.length;
-      }
-    }
-    if (noteAt === noteLines.length && paymentAt < payments.length) {
-      const offset = height ? height + 19 : 0;
-      const capacity = Math.max(0, Math.floor((available - offset - 22 - 10) / 22) + 1);
-      const rows = payments.slice(paymentAt, paymentAt + capacity);
-      if (rows.length) {
-        chunks.push({ kind: 'payments', offset, continued: paymentAt > 0, rows });
-        height = offset + 22 + (rows.length - 1) * 22 + 10;
-        paymentAt += rows.length;
-      }
-    }
-    if (!chunks.length) { nextPage(false); continue; }
-    const top = closingBottom - height;
-    for (const chunk of chunks) {
-      const sectionTop = top + chunk.offset;
-      const heading = chunk.kind === 'notes' ? labels.note : labels.payments;
-      drawText(page, chunk.continued ? `${heading} · ${labels.continued}` : heading, LEFT, sectionTop, bold, 9, brown);
-      if (chunk.kind === 'notes') {
-        drawLines(page, chunk.lines, LEFT, sectionTop + 19, normal, 10.5, NOTE_LINE, muted);
-      } else chunk.rows.forEach((payment, index) => {
-        const y = sectionTop + 22 + index * 22;
-        drawText(page, payment.date ? displayDate(payment.date, true, language) : labels.paymentNoDate, LEFT, y, normal, 10, muted);
-        drawRight(page, money(payment.amount, language), 291, y, normal, 10);
-      });
-    }
-    if (noteAt < noteLines.length || paymentAt < payments.length) nextPage(false);
-  }
-  drawTotals(page, context, totals);
+  drawTimelineClosing(doc, page, cursor, draft, context, totals);
   drawFooters(doc, context);
   return new Uint8Array(await doc.save());
 }

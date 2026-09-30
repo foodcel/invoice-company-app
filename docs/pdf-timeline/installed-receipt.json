@@ -1,0 +1,10 @@
+{
+  "installedSha256": "FF6DD557FD19F63A5DD72F0A4D32CEB89821F2CB4BD94FEE15DB6E24E7B78DDE",
+  "buildSha256": "E820FB6FF29BE9961452AF464D052266497D35FDC96104D0EB3114D4403C3A9B",
+  "version": "0.1.19",
+  "installedPath": "C:\\Users\\Mathys\\AppData\\Local\\Soumissions et factures\\invoice-company-app.exe",
+  "statePreserved": true,
+  "matchesBuildExceptNsisMarker": true,
+  "differingBytes": 3,
+  "markerChange": "TAURI_BUNDLE_TYPE_VAR_UNK -> TAURI_BUNDLE_TYPE_VAR_NSS"
+}
