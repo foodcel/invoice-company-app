@@ -7,10 +7,11 @@ import { createPdf, calculateTotals } from '../web/pdf.js';
 import { sampleDraft, longDraft } from './fixtures.mjs';
 
 const output = new URL('../test-output/', import.meta.url);
+const legacyTotals = draft => Object.fromEntries(Object.entries(calculateTotals(draft)).filter(([key])=>['subtotal','tps','tvq','total','deposit','balance'].includes(key)));
 
 test('quote amounts and printable Letter PDF', async () => {
   const draft = sampleDraft();
-  assert.deepEqual(calculateTotals(draft), {
+  assert.deepEqual(legacyTotals(draft), {
     subtotal: 250, tps: 12.5, tvq: 24.94,
     total: 287.44, deposit: 30, balance: 257.44,
   });
@@ -49,6 +50,7 @@ test('one long work description continues across Letter pages', async () => {
 });
 
 test('customer output rejects missing facts and creates an English invoice copy', async () => {
+  await assert.rejects(createPdf({...sampleDraft('facture'), project:'  '}, {invoiceNumber:2060}), /Nom du projet/);
   const draft = sampleDraft('facture');
   await assert.rejects(createPdf(draft, {}), /Numéro de facture/);
   const english = structuredClone(draft);
@@ -86,7 +88,7 @@ test('English quote keeps the French numeric facts on Letter paper', async () =>
 test('dated payments preserve taxes and produce French and English customer copies', async () => {
   const draft = sampleDraft('facture');
   draft.payments = [{ amount: '40,25', date: '2026-09-18' }, { amount: '15,50', date: '2026-09-25' }, { amount: '', date: '' }];
-  assert.deepEqual(calculateTotals(draft), { subtotal: 250, tps: 12.5, tvq: 24.94, total: 287.44, deposit: 55.75, balance: 231.69 });
+  assert.deepEqual(legacyTotals(draft), { subtotal: 250, tps: 12.5, tvq: 24.94, total: 287.44, deposit: 55.75, balance: 231.69 });
   await mkdir(output, { recursive: true });
   for (const language of ['fr', 'en']) {
     const bytes = await createPdf(draft, { invoiceNumber: 2060, language });

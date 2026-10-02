@@ -2057,13 +2057,14 @@ dependencies = [
 
 [[package]]
 name = "invoice-company-app"
-version = "0.1.19"
+version = "0.1.31"
 dependencies = [
  "base64 0.22.1",
  "chrono",
  "fs2",
  "jsonwebtoken",
  "keyring",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

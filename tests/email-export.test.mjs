@@ -14,10 +14,12 @@ function exportProbe({ fail = false, prior = false, production = source } = {}) 
   const events = [];
   const draft = { ...sampleDraft(), id: 'isolated-email', kind: 'facture', invoiceNumber: 2060, issuedNumber: null };
   const context = {
+    finishWritingForOutput:async()=>{},
     busy: false, state: draft, records: prior ? [{ id: draft.id, exports: [{}] }] : [],
     pdfDirectory: 'isolated/output', englishMode: false, editRevision: 1, savedRevision: 0,
     numberEditing: false, numberConfirm: null, numberError: '', outputStatus: '', Uint8Array,
     copy: value => structuredClone(value), readyForOutput: () => true,
+    ensureInvoiceNumberConfirmed: async () => true,
     confirm: () => { throw new Error('Unexpected confirmation during reviewed email send'); },
     setBusy: value => { context.busy = value; }, flushChanges: async () => { events.push('draft-saved'); return true; },
     createPdf: async (...args) => { events.push('pdf-generated'); return createPdf(...args); },
@@ -43,7 +45,7 @@ function exportProbe({ fail = false, prior = false, production = source } = {}) 
 test('email export creates a real durable PDF receipt before mail can use it, including prior-copy case', async () => {
   for (const prior of [false, true]) {
     const { context, events } = exportProbe({ prior });
-    const saved = await context.exportDocument(false, true);
+    const saved = await context.exportDocument(true);
     assert.equal(saved.draftId, 'isolated-email');
     assert.equal(saved.filename, 'Facture_2060_Client.pdf');
     assert.equal(saved.path, 'isolated/output/Facture_2060_Client.pdf');
@@ -55,19 +57,19 @@ test('email export creates a real durable PDF receipt before mail can use it, in
 
 test('failed PDF export rejects email preparation and leaves invoice unissued', async () => {
   const probe = exportProbe({ fail: true });
-  await assert.rejects(probe.context.exportDocument(false, true), /Synthetic archive failure/);
+  await assert.rejects(probe.context.exportDocument(true), /Synthetic archive failure/);
   assert.equal(probe.context.state.issuedNumber, null);
   assert.equal(probe.context.busy, false);
   // Calibrate: swallowing the export error reproduces the unsafe mail-attachment behavior.
   const defective = source.replace('if (forEmail) throw error;', '/* injected swallowed export error */');
   assert.notEqual(defective, source);
   const broken = exportProbe({ fail: true, production: defective });
-  await assert.rejects(async () => assert.ok(await broken.context.exportDocument(false, true)), /falsy|false/i);
+  await assert.rejects(async () => assert.ok(await broken.context.exportDocument(true)), /falsy|false/i);
 });
 
 test('incomplete documents cannot produce email attachments', async () => {
   const probe = exportProbe();
   probe.context.readyForOutput = () => false;
-  await assert.rejects(probe.context.exportDocument(false, true), /n’est pas prêt/);
+  await assert.rejects(probe.context.exportDocument(true), /n’est pas prêt/);
   assert.deepEqual(probe.events, []);
 });

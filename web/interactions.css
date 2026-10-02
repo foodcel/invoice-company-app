@@ -1,0 +1,49 @@
+/* Feedback applies to every enabled control, with no layout-changing borders. */
+:is(.app,.email-overlay) button:not(:disabled):hover { box-shadow:inset 0 0 0 1px var(--accent,var(--em-accent,#226b5b)); }
+:is(.app,.email-overlay) :is(input,textarea,select):not(:disabled):hover { border-color:var(--accent,var(--em-accent,#226b5b)); }
+:is(.app,.email-overlay) :is(summary,.provider-choices label) { cursor:pointer; transition:background-color .16s,box-shadow .16s; border-radius:6px; }
+:is(.app,.email-overlay) :is(summary,.provider-choices label):hover { background:var(--soft,var(--em-soft)); box-shadow:inset 0 0 0 1px var(--border,var(--em-border)); }
+:is(.app,.email-overlay) button:not(:disabled):active { transform:translateY(1px) scale(.98); box-shadow:inset 0 2px 4px #18372b30; }
+:is(.app,.email-overlay) button:disabled { cursor:default; transform:none; filter:none; }
+:is(.app,.email-overlay) button:disabled svg { transform:none!important; }
+:is(.app,.email-overlay) button:disabled:hover { box-shadow:none; }
+.app.v1 .actions.email-output-actions button:disabled:hover { transform:none; box-shadow:none; }
+.app .provider-choices label:has(input:disabled):hover { background:transparent; box-shadow:none; cursor:default; }
+:is(.app,.email-overlay) button { transition:transform .16s,background-color .16s,border-color .16s,color .16s,box-shadow .16s; }
+:is(.app,.email-overlay) :is(button,a[href],summary,select):focus-visible { outline:2px solid #448ad7; outline-offset:2px; }
+.app :is(.settings-close,.recent-head > button,.library-head > button,.recent-panel header > button):not(:disabled):hover,
+.email-overlay .settings-close:not(:disabled):hover { background:var(--soft,var(--em-soft)); border-color:var(--accent,var(--em-accent)); color:var(--accent,var(--em-accent)); }
+.app :is(.settings-close,.recent-panel header > button) svg,.email-overlay .em-icon svg { transition:transform .16s; }
+.app :is(.settings-close,.recent-panel header > button):not(:disabled):hover svg,.email-overlay .em-icon:not(:disabled):hover svg { transform:rotate(7deg); }
+.app .library-filters button:not(:disabled):hover { border-color:var(--accent); box-shadow:inset 0 0 0 2px var(--accent); }
+.app :is(.library-row,.version-row):not(:disabled):hover { background:var(--soft); border-color:var(--accent); }
+.app .version-row.selected:not(:disabled):hover { box-shadow:inset 0 0 0 2px var(--accent); }
+.app .library-create-trigger:hover { background:var(--soft); border-color:var(--accent); }
+.app .library-paper:hover { background:var(--soft); border-radius:8px; }
+.app .theme-choices button:hover { color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+.app :is(.section-tools,.line-header-actions,.notes-tools) button svg,.app .settings-trigger svg { transition:transform .16s; }
+.app :is(.section-tools,.line-header-actions,.notes-tools) button:not(:disabled):hover svg { transform:translateY(-1px); }
+.app .settings-trigger:hover svg { transform:rotate(15deg); }
+.v1 .actions.email-output-actions button svg { transition:transform .18s ease; transform-origin:center; }
+.v1 .actions.email-output-actions [data-save-draft]:not(:disabled):hover svg { transform:translateY(-2px); }
+.v1 .actions.email-output-actions [data-pdf]:not(:disabled):hover svg { transform:rotate(-7deg) translateY(-1px); }
+.v1 .actions.email-output-actions [data-print]:not(:disabled):hover svg { transform:translateY(2px); }
+.v1 .actions.email-output-actions button:not(:disabled):active { transform:translateY(1px) scale(.98); box-shadow:inset 0 2px 4px #18372b30; }
+.v1 .actions.email-output-actions [data-send-email],.email-overlay .em-send { background:#287354; color:#fff; }
+.v1 .actions.email-output-actions [data-send-email]:hover,.email-overlay .em-send:hover:not(:disabled) { background:#287354; color:#fff; filter:none; box-shadow:0 5px 12px #194d3933,inset 0 0 0 1px #ffffff70; }
+.email-overlay .em-send:hover:not(:disabled) svg { transform:translate(2px,-1px); }
+.email-overlay .em-send svg { transition:transform .18s; }
+.email-overlay a.em-button:hover { background:var(--em-soft); box-shadow:inset 0 0 0 1px var(--em-accent); }
+/* Motion is owned by view lifecycle, never by recreated status markup. */
+:is(.app,.email-overlay) :is([role="dialog"],.number-popover) { animation:none!important; }
+.settings-pane.update-panel .settings-body { min-height:275px; }
+.settings-pane.update-panel .update-detail { min-height:110px; }
+.settings-pane.update-panel .update-actions { display:flex; min-height:44px; }
+.saved-pdf-pages { display:flex; flex-direction:column; align-items:center; gap:16px; width:100%; min-width:0; }
+.saved-pdf-page { display:block; width:min(100%,calc((100dvh - 360px) * var(--pdf-page-ratio))); height:auto; background:#fff; box-shadow:0 3px 12px #19281e14; object-fit:contain; }
+.history-paper:has(.saved-pdf-pages) { display:block; }
+@media(prefers-reduced-motion:reduce) {
+  :is(.app,.email-overlay) *, :is(.app,.email-overlay) *::before, :is(.app,.email-overlay) *::after { animation:none!important; transition:none!important; }
+  :is(.app,.email-overlay) button,:is(.app,.email-overlay) button svg { transform:none!important; }
+  .toast { transition:none!important; }
+}

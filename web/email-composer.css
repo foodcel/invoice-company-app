@@ -15,25 +15,26 @@
 .email-overlay *, .email-overlay *::before, .email-overlay *::after { box-sizing: border-box; }
 .email-overlay [hidden] { display: none !important; }
 .email-overlay svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
-.email-overlay button, .email-overlay input, .email-overlay textarea { font: inherit; color: inherit; }
+.email-overlay button:where(:not(.settings-back)):where(:not(.settings-close)), .email-overlay input, .email-overlay textarea { font: inherit; color: inherit; }
 .email-overlay button { cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s; }
 .email-overlay button:disabled { opacity: .45; cursor: default; transform: none; }
 .email-overlay :is(button,a,input,textarea,summary):focus-visible { outline: none; box-shadow: inset 0 0 0 2px #448ad7; }
-.em-dialog { display: flex; flex-direction: column; width: min(740px, 100%); max-height: calc(100dvh - 40px); background: var(--em-panel); color: var(--em-ink); border: 1px solid var(--em-border); border-radius: 16px; box-shadow: 0 26px 76px #172d3550; }
+.em-dialog { display: flex; flex-direction: column; background: var(--em-panel); color: var(--em-ink); }
+.em-dialog:where(:not(.settings-pane)) { width: min(740px, 100%); max-height: calc(100dvh - 40px); border: 1px solid var(--em-border); border-radius: 16px; box-shadow: 0 26px 76px #172d3550; }
 .em-composer { min-height: min(538px, calc(100dvh - 40px)); }
-.em-head { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--em-border); flex: none; min-height: 58px; }
-.em-head h2 { margin: 0; font-size: 17px; line-height: 1.2; letter-spacing: -.025em; }
+.em-head:where(:not(.settings-head)) { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--em-border); flex: none; min-height: 58px; }
+.em-head:where(:not(.settings-head)) h2 { margin: 0; font-size: 17px; line-height: 1.2; letter-spacing: -.025em; }
 .em-heading { min-width: 0; }
 .em-heading p { margin: 3px 0 0; color: var(--em-muted); font-size: 11px; overflow-wrap: anywhere; }
 .em-symbol { display: grid; place-items: center; flex: none; width: 33px; height: 33px; background: var(--em-soft); color: var(--em-accent); border-radius: 9px; }
 .em-sender { display: flex; align-items: center; gap: 8px; min-width: 0; margin-left: auto; }
 .em-sender-address { font-size: 11px; font-weight: 600; max-width: 195px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .em-outlook { display: grid; place-items: center; flex: none; width: 23px; height: 25px; background: #e7f1fd; color: #276bad; font-weight: 750; font-size: 11px; border-radius: 5px; }
-.em-button, .em-icon { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 36px; padding: 6px 12px; border: 1px solid var(--em-border); border-radius: 8px; background: var(--em-panel); white-space: nowrap; }
-.em-icon { position: relative; flex: none; width: 33px; height: 33px; min-height: 33px; padding: 0; color: var(--em-muted); }
-.email-overlay button:hover:not(:disabled) { background: var(--em-soft); border-color: var(--em-accent); box-shadow: inset 0 0 0 1px var(--em-accent); }
-.em-icon::after { content: attr(data-tooltip); position: absolute; top: calc(100% + 7px); right: 0; z-index: 5; padding: 5px 8px; border: 1px solid var(--em-border); border-radius: 6px; background: var(--em-panel); color: var(--em-ink); box-shadow: 0 3px 14px #0002; font-size: 11px; pointer-events: none; opacity: 0; transition: opacity .15s; white-space: nowrap; }
-.em-icon:hover::after, .em-icon:focus-visible::after { opacity: 1; }
+.em-button:where(:not(.settings-back)), .em-icon:where(:not(.settings-close)) { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 36px; padding: 6px 12px; border: 1px solid var(--em-border); border-radius: 8px; background: var(--em-panel); white-space: nowrap; }
+.em-icon:where(:not(.settings-close)) { position: relative; flex: none; width: 33px; height: 33px; min-height: 33px; padding: 0; color: var(--em-muted); }
+.email-overlay button:hover:not(:disabled):where(:not(.settings-back)):where(:not(.settings-close)) { background: var(--em-soft); border-color: var(--em-accent); box-shadow: inset 0 0 0 1px var(--em-accent); }
+.em-icon:where(:not(.settings-close))::after { content: attr(data-tooltip); position: absolute; top: calc(100% + 7px); right: 0; z-index: 5; padding: 5px 8px; border: 1px solid var(--em-border); border-radius: 6px; background: var(--em-panel); color: var(--em-ink); box-shadow: 0 3px 14px #0002; font-size: 11px; pointer-events: none; opacity: 0; transition: opacity .15s; white-space: nowrap; }
+.em-icon:where(:not(.settings-close)):hover::after, .em-icon:where(:not(.settings-close)):focus-visible::after { opacity: 1; }
 .em-content { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: auto; border-radius: 0 0 15px 15px; }
 .em-routing { padding: 7px 20px 0; }
 .em-row { display: flex; align-items: center; gap: 9px; min-height: 40px; padding: 4px 0; border-bottom: 1px solid var(--em-border); }
@@ -65,9 +66,18 @@
 .em-status { margin: 0; padding: 9px 20px; max-height: 110px; overflow: auto; overflow-wrap: anywhere; font-size: 12px; color: var(--em-ink); background: var(--em-soft); border-top: 1px solid var(--em-border); }
 .email-overlay [aria-invalid="true"] { outline: none; box-shadow: inset 0 0 0 2px #c54837; }
 .em-layer { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; background: #15272065; }
-.em-settings { width: min(520px, 100%); }
-.em-settings .em-head { justify-content: space-between; }
-.em-settings-content { padding: 18px 20px; overflow: auto; min-height: 0; }
+.em-settings:where(:not(.settings-pane)) { width: min(520px, 100%); }
+.em-settings .em-head:where(:not(.settings-head)) { justify-content: space-between; }
+.email-overlay.em-settings-standalone {
+  --panel: var(--em-panel); --bg: var(--em-bg); --border: var(--em-border);
+  --ink: var(--em-ink); --muted: var(--em-muted); --accent: var(--em-accent); --soft: var(--em-soft);
+  padding: 0; background: #1b2c2512; backdrop-filter: none;
+}
+.em-settings-standalone > .em-layer { place-items: start end; padding: 88px 24px 20px; background: transparent; }
+.em-settings-standalone .em-settings { animation: em-settings-in .16s ease-out; }
+@keyframes em-settings-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+.em-settings-content { overflow: auto; min-height: 0; }
+.em-settings-content:where(:not(.settings-body)) { padding: 18px 20px; }
 .em-settings-card { padding-bottom: 16px; margin-bottom: 14px; border-bottom: 1px solid var(--em-border); }
 .em-settings-card h3 { margin: 0 0 7px; font-size: 14px; }
 .em-settings-card strong { overflow-wrap: anywhere; }
@@ -89,9 +99,9 @@
 .em-another { max-width: 100%; white-space: normal; font-size: 12px; }
 @media (max-width: 650px) {
   .email-overlay, .em-layer { padding: 10px; }
-  .em-dialog { max-height: calc(100dvh - 20px); }
-  .em-head { flex-wrap: wrap; gap: 8px; padding: 12px 13px; }
-  .em-head h2 { font-size: 15px; }
+  .em-dialog:where(:not(.settings-pane)) { max-height: calc(100dvh - 20px); }
+  .em-head:where(:not(.settings-head)) { flex-wrap: wrap; gap: 8px; padding: 12px 13px; }
+  .em-head:where(:not(.settings-head)) h2 { font-size: 15px; }
   .em-symbol { display: none; }
   .em-heading { flex: 1; }
   .em-sender { order: 3; flex-basis: 100%; margin: 0; }
@@ -105,13 +115,15 @@
   .em-attachment { margin-left: 13px; margin-right: 13px; }
   .em-footer { padding: 10px 13px; }
   .em-footer-hint { flex-basis: 100%; }
-  .em-settings .em-head { flex-wrap: nowrap; }
-  .em-icon::after { max-width: 230px; white-space: normal; width: max-content; }
+  .em-settings .em-head:where(:not(.settings-head)) { flex-wrap: nowrap; }
+  .em-icon:where(:not(.settings-close))::after { max-width: 230px; white-space: normal; width: max-content; }
+  .em-settings-standalone > .em-layer { padding: 80px 12px 20px; }
 }
 @media (max-height: 500px) {
   .email-overlay, .em-layer { padding: 6px; }
-  .em-dialog { max-height: calc(100dvh - 12px); min-height: 0; }
-  .em-head { min-height: 48px; padding-top: 7px; padding-bottom: 7px; }
+  .em-dialog:where(:not(.settings-pane)) { max-height: calc(100dvh - 12px); min-height: 0; }
+  .em-head:where(:not(.settings-head)) { min-height: 48px; padding-top: 7px; padding-bottom: 7px; }
   .em-footer-hint { display: none; }
+  .em-settings-standalone > .em-layer { padding: 12px; }
 }
-@media (prefers-reduced-motion: reduce) { .email-overlay button, .em-icon::after { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .email-overlay button, .em-icon::after { transition: none; } .em-settings-standalone .em-settings { animation: none; } }

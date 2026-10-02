@@ -1,0 +1,19 @@
+/* Approved mockup 2: description, centered field cues, then numeric inputs. */
+.app.v1 .compact-work .line-body { display:flex; flex-direction:column; }
+.app.v1 .compact-work .work-labels { order:initial; }
+.app.v1 .compact-work .work-labels span { gap:4px; }
+.app.v1 .compact-work .description-label { padding-left:0; padding-right:0; justify-content:flex-start; }
+.app.v1 .compact-work .price-label { flex:1; justify-content:center; margin-left:24px; padding-right:6px; }
+.app.v1 .compact-work :is(.quantity-label,.amount-label) { justify-content:center; padding-right:0; }
+@container editor (max-width:520px) {
+ .app.v1 .compact-work :is(.work-labels,.work-metrics) { display:grid; grid-template-columns:40px minmax(0,1fr) 58px minmax(0,1fr); gap:6px; }
+ .app.v1 .compact-work .line-amount { grid-column:auto; font-size:12px; padding:6px; }
+ .app.v1 .compact-work .work-labels { font-size:10px; }
+ .app.v1 .compact-work .work-labels>div { display:contents; }
+ .app.v1 .compact-work .description-label { grid-column:1/-1; padding-left:6px; }
+ .app.v1 .compact-work .price-label { grid-column:2; grid-row:2; margin-left:0; padding:0; }
+ .app.v1 .compact-work .quantity-label { grid-column:3; grid-row:2; }
+ .app.v1 .compact-work .amount-label { grid-column:4; grid-row:2; }
+ .app.v1 .compact-work .field-arrow { width:12px; height:12px; }
+ .app.v1 .compact-work .work-tool-rail { height:auto; align-self:stretch; }
+}

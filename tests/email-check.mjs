@@ -207,7 +207,7 @@ async function probeArchiveFailure(makeFlow) {
 }
 await check('negative probes go RED for injected preflight bypass and PDF export bypass', async () => {
   await probePreflight(createSendFlow); await probeArchiveFailure(createSendFlow);
-  const source = await readFile(new URL('../web/email-composer.js', import.meta.url), 'utf8');
+  const source = (await readFile(new URL('../web/email-composer.js', import.meta.url), 'utf8')).replace("from './interactions.js'", `from '${new URL('../web/interactions.js',import.meta.url).href}'`);
   const mutations = [
     { name: 'preflight bypass', anchor: 'if (issues.length) return Promise.reject(Object.assign(new Error(issues[0].message), { issues }));', replacement: '/* injected preflight bypass */', probe: probePreflight },
     { name: 'PDF export bypass', anchor: 'attachmentMetadata(await Promise.resolve().then(preparePdf))', replacement: 'attachmentMetadata({path:"C:\\\\fake.pdf",filename:"fake.pdf",draftId:"fake"})', probe: probeArchiveFailure },

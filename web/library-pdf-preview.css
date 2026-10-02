@@ -1,0 +1,10 @@
+/* Fit real PDF pages, including their footer, inside thumbnail viewports. */
+.library-thumbnail .library-thumbnail-paper,.library-paper .library-detail-paper,.history-paper .library-detail-paper:has(.library-draft-preview) { width:100%; height:100%; zoom:1; container-type:normal; }
+.library-draft-preview { min-height:1px; display:flex; align-items:center; justify-content:center; width:100%; height:100%; }
+.library-draft-preview>img { display:block; width:auto; height:auto; max-width:100%; max-height:100%; object-fit:contain; }
+.library-preview-loading { color:var(--muted); font-size:12px; }
+.library-thumbnail .library-preview-loading { font-size:0; }
+.library-full-paper .library-draft-preview,.history-paper .library-draft-pages { display:grid; gap:16px; height:auto; }
+.library-draft-pages>img { width:100%; height:auto; object-fit:contain; box-shadow:0 3px 12px #18291f1c; }
+.library-preview-count { color:var(--muted); font-size:12px; margin-top:-12px; }
+.library-preview-count[hidden] { display:none; }

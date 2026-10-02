@@ -1,0 +1,45 @@
+.preview-source { display:none!important; }
+.app.v1 .preview-scroll,.app.v1 .preview-page { overflow:visible; max-height:none; height:auto; }
+.live-pdf-pages { display:grid; gap:18px; }
+.letter-pdf-page { display:block; width:100%; height:auto; aspect-ratio:612/792; background:white; border:1px solid #d4d9d6; border-radius:8px; box-shadow:0 3px 18px #26382b08; }
+.page-status { margin:12px 0 0; color:var(--muted); font-size:12px; line-height:1.6; }
+.page-status[hidden] { display:none!important; }
+.page-status.multiple-pages { padding:10px 12px; background:var(--soft); border:1px solid var(--border); border-radius:8px; color:var(--ink); }
+.app.v1 .preview { overflow:visible; }
+.app.v1 .line-input-shell:has(.quantity-steps):focus-within { outline:0; outline-offset:0; box-shadow:inset 0 0 0 2px #448ad7; }
+.app.v1 .line-input-shell:focus-within { position:relative; }
+.app.v1 .line-input-shell:focus-within::after { content:''; position:absolute; inset:0; border-radius:inherit; box-shadow:inset 0 0 0 2px #448ad7; pointer-events:none; }
+.integrated-select { position:relative; min-width:0; margin-top:5px; }
+.integrated-select>select { position:absolute!important; width:1px!important; height:1px!important; min-height:0!important; padding:0!important; margin:0!important; border:0!important; opacity:0; pointer-events:none; }
+.app .select-trigger { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; height:45px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--ink); padding:10px 14px; text-align:left; font-size:14px; }
+.select-trigger>span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.select-chevron { width:7px; height:7px; border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:rotate(45deg) translateY(-2px); flex:none; margin-right:2px; }
+.app .select-trigger:hover { border-color:var(--accent); }
+.app.v1 .select-trigger:focus-visible,.app.v1 .select-trigger[aria-expanded=true] { outline:0; outline-offset:0; box-shadow:inset 0 0 0 2px #448ad7; }
+.app.v1 .select-options button:focus { outline:0; outline-offset:0; box-shadow:inset 3px 0 0 var(--accent); background:var(--soft); color:var(--accent); }
+.select-options { position:absolute; top:calc(100% + 5px); left:0; right:0; z-index:150; max-height:250px; overflow-y:auto; padding:5px; border:1px solid var(--border); border-radius:9px; background:var(--panel); box-shadow:0 8px 24px #18291f20; }
+.select-options[hidden] { display:none; }
+.app .select-options button { display:block; width:100%; padding:9px 10px; border:0; border-radius:5px; background:transparent; color:var(--ink); text-align:left; font-size:13px; box-shadow:none; transform:none; }
+.app .select-options button+button { margin-top:3px; }
+.app.v1 .select-options button { transition:background-color .12s,color .12s; }
+.app.v1 .select-options button:not(:disabled):hover:not(:focus) { box-shadow:none; transform:none; }
+.app.v1 .select-options button:not(:disabled):active { transform:none; }
+.app .select-options button:hover,.app .select-options button[aria-selected=true] { background:var(--soft); color:var(--accent); }
+.calendar-toolbar .integrated-select { flex:1; margin:0; }
+.calendar-toolbar .integrated-select:has([data-calendar-year]) { flex:none; width:77px; }
+.app .calendar-toolbar .select-trigger { height:34px; min-height:34px; padding:4px 7px; font-size:13px; }
+.app.v1 .payment-entry .payment-date-shell { height:40px; margin:0; min-width:0; border-radius:8px; overflow:hidden; }
+.app.v1 .payment-date-shell input { height:38px; min-height:38px; padding:8px 10px; border-radius:8px 0 0 8px; }
+.app.v1 .payment-entry .payment-date-shell .payment-date { width:47px; height:38px; min-height:38px; padding:0; border:0; border-left:1px solid var(--border); border-radius:0 7px 7px 0; background:var(--soft); color:var(--accent); justify-content:center; }
+.app.v1 .payment-entry .payment-date-shell .payment-date:hover,.app.v1 .payment-entry .payment-date-shell .payment-date[aria-expanded=true] { background:var(--accent); color:var(--accent-ink); }
+#print-document { display:none; }
+@media print {
+  @page { size:letter; margin:0; }
+  html,body { width:8.5in!important; margin:0!important; padding:0!important; background:white!important; }
+  body>*:not(#print-document) { display:none!important; }
+  body>#print-document { display:block!important; }
+  #print-document img { display:block; width:8.5in; height:11in; margin:0; padding:0; break-after:page; page-break-after:always; }
+  #print-document img:last-child { break-after:auto; page-break-after:auto; }
+}
+
+.app .integrated-select:has(select[aria-invalid=true]) .select-trigger { border-color:#b42318; box-shadow:inset 0 0 0 2px #dd55402e; }

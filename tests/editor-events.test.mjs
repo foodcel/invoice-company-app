@@ -14,8 +14,12 @@ function editor(source) {
   const listeners = {}, calls = { dirty: 0, saves: 0, render: 0, undo: 0, mail: 0, mailSettings: 0 };
   const state = { id: 'probe', kind: 'facture', client: '', items: [{ description: '', quantity: '1', price: '' }], payments: [{ amount: '', date: '' }] };
   const context = {
-    state, busy: false, mailOpen: false, englishMode: false, voiceSession: null, voiceRecovery: null,
+    automatic: {reconcile() {}, observe() {}, snapshot:()=>({undoable:false}), schedule:async()=>{}},
+    writingIds:()=>({items:[],notes:[]}), validateDescriptionLimits:async()=>{}, paintWritingStatus() {},
+    state, busy: false, rowMotionPending:false, mailOpen: false, englishMode: false, voiceSession: null, voiceRecovery: null,
     voiceRetryBusy: false, lineAssist: null, calendarField: null, calendarView: null,
+    closePanelMotion() {},
+    async collapseRowMotion() {},
     document: { addEventListener: (name, fn) => listeners[name] = fn, querySelector: () => null },
     rememberUndo: () => calls.undo++, markDirty: () => calls.dirty++,
     saveNow: async () => { calls.saves++; }, render: () => calls.render++,
@@ -24,14 +28,30 @@ function editor(source) {
     composeEmail: async () => calls.mail++, showMailSettings: async () => calls.mailSettings++,
     formatPhoneInput, Event: class { constructor(type) { this.type = type; } }
   };
-  vm.runInNewContext(source.slice(start, end), context);
+  const dateStart = source.indexOf('    const pad2 =');
+  const dateEnd = source.indexOf('    const monthNames =', dateStart);
+  assert.ok(dateStart >= 0 && dateEnd > dateStart, 'Production date helpers were not found');
+  vm.runInNewContext(source.slice(dateStart, dateEnd) + source.slice(start, end), context);
   const input = (dataset, value) => listeners.input({ target: { dataset, value, tagName: 'INPUT', hasAttribute: () => false } });
   const click = async (attribute, dataset = {}) => {
-    const button = { dataset, hasAttribute: name => name === attribute };
+    const button = { dataset, hasAttribute: name => name === attribute, closest: () => null };
     await listeners.click({ target: { dataset: {}, closest: () => button } });
   };
   return { state, calls, context, input, click };
 }
+
+test('type switch initializes absent quote validity from original date and preserves a custom date', async () => {
+  const probe = editor(await readFile(new URL('../web/app.js', import.meta.url), 'utf8'));
+  Object.assign(probe.state, { date: '2026-12-20', validUntil: '', dueDate: '' });
+  await probe.click('', { kind: 'soumission' });
+  assert.equal(probe.state.validUntil, '2027-01-19');
+  assert.equal(probe.state.dueDate, '');
+  assert.equal(probe.calls.saves, 1);
+  await probe.click('', { kind: 'facture' });
+  probe.state.validUntil = '2027-02-10';
+  await probe.click('', { kind: 'soumission' });
+  assert.equal(probe.state.validUntil, '2027-02-10');
+});
 
 test('production form listeners preserve typing and route payment Add/Remove clicks', async () => {
   const source = await readFile(new URL('../web/app.js', import.meta.url), 'utf8');
@@ -60,9 +80,9 @@ test('production form listeners preserve typing and route payment Add/Remove cli
   assert.equal(probe.state.deposit, '');
   assert.equal(probe.calls.saves, 3);
   // Negative control: the old routing bug must fail on ordinary typing.
-  const marker = '      if (el.dataset.field) {';
+  const marker = '      } else if (el.dataset.field) {';
   assert.ok(source.includes(marker));
-  const broken = editor(source.replace(marker, "      if (b.hasAttribute('data-add-payment')) return;\n" + marker));
+  const broken = editor(source.replace(marker, marker + "\n        if (b.hasAttribute('data-add-payment')) return;"));
   assert.throws(() => broken.input({ field: 'client' }, 'Peter'), /b is not defined/);
 });
 

@@ -1,0 +1,94 @@
+/* Small targets share one size; destructive/close targets share one feedback. */
+.app.v1 .section-tools button,
+.app.v1 .line-header-actions button,
+.app.v1 .remove-line,
+.app.v1 .payment-remove,
+.app.v1 .notes-tools button { width:40px; min-width:40px; height:40px; min-height:40px; padding:0; border-radius:10px; }
+.app.v1 .section-tools button svg,
+.app.v1 .notes-tools button svg { width:19px; height:19px; }
+.app.v1 button.library-paper,
+.app.v1 button.library-paper:not(:disabled):hover,
+.app.v1 button.library-paper:not(:disabled):active { background:transparent; border:0; box-shadow:none; transform:none; filter:none; cursor:zoom-in; }
+.app .recent-panel.history-dialog { height:calc(100dvh - 48px); max-height:calc(100dvh - 48px); }
+.history-dialog > header,.history-dialog > footer { flex:none; }
+.history-dialog .history-body { flex:1; min-height:0; overflow:hidden; }
+.history-dialog .version-list { min-height:0; overflow:auto; }
+.history-dialog .version-detail { display:flex; flex-direction:column; min-height:0; }
+.history-dialog .version-detail-head { flex:none; }
+.history-dialog .version-detail .history-paper { flex:1; min-height:0; overflow:auto; container-type:size; }
+.history-dialog .history-paper .library-detail-paper { zoom:min(calc(100cqw / 680px),calc(100cqh / 880px)); }
+.history-dialog .saved-pdf-page { width:min(100%,calc(100cqh * var(--pdf-page-ratio))); }
+.history-dialog .version-disclaimer { flex:none; min-height:38px; margin:12px 0 0; }
+.app .document-badge { border:1px solid #c1cede; background:#edf2f8; color:#375570; }
+.app .document-badge.quote { border:1px solid #dacbb6; background:#f6f0e6; color:#77572f; }
+.app.dark .document-badge { border-color:#576b82; background:#283846; color:#c1d5e9; }
+.app.dark .document-badge.quote { border-color:#7b694e; background:#3b3328; color:#e3c89c; }
+.delete-overlay { padding:24px; background:#18291f50; backdrop-filter:blur(2px); }
+.delete-zone { padding-top:12px; margin-top:5px; border-top:1px solid var(--border); }
+.delete-zone small { display:block; text-align:center; font-size:11px; color:var(--muted); margin-top:7px; }
+.app.v1 .delete-zone .danger { display:flex; justify-content:center; align-items:center; gap:8px; width:100%; min-height:40px; color:var(--close-ink); background:var(--close-bg); border:1px solid var(--close-border); }
+.app.v1 .delete-zone .danger:not(:disabled):hover { color:var(--close-ink); background:var(--panel); border-color:var(--close-ink); box-shadow:inset 0 0 0 1px var(--close-border); }
+.delete-zone svg,.draft-protection svg { width:17px; height:17px; flex:none; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.library-detail .draft-protection { display:flex; align-items:flex-start; gap:8px; padding-top:12px; margin-top:5px; border-top:1px solid var(--border); font-size:11px; }
+.app.v1 .delete-dialog .danger-fill { background:#b42318; color:#fff; border:1px solid #b42318; border-radius:8px; padding:10px 14px; min-height:42px; font-weight:700; }
+.app.v1 .delete-dialog .danger-fill:not(:disabled):hover { background:#921c14; color:#fff; border-color:#921c14; box-shadow:0 3px 8px #b4231825; }
+.delete-dialog .restore-summary { overflow-wrap:anywhere; }
+.app.v1 .language-panel { padding:0; gap:0; overflow:hidden; height:44px; }
+.app.v1 .language-panel button { border-radius:0; height:42px; }
+.app.v1 .language-panel button + button { border-left:1px solid var(--border); }
+.app.v1 .language-panel button.active { box-shadow:none; background:var(--soft); }
+.app.v1 .language-panel button:hover { box-shadow:inset 0 0 0 1px var(--accent); }
+.number-quick-controls { margin-left:auto; display:flex; gap:5px; flex:none; }
+.number-row .number-quick-controls .number-edit { margin-left:0; }
+.app.v1 .client-fields { border-bottom:1px solid var(--border); padding-bottom:20px; }
+.app.v1 .optional-fields { border-top:1px solid var(--border); padding-top:20px; margin-top:20px; padding-bottom:20px; border-bottom:1px solid var(--border); }
+.app.v1 :is(.client-fields,.items-section,.optional-fields) > h4,
+.app.v1 .items-section .table-head h4 { font-size:16px; font-weight:700; }
+.work-lines-card { border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--surface); }
+.work-lines-card .line-entry { border:0; border-radius:0; margin:0; }
+.work-lines-card .line-entry + .line-entry { border-top:1px solid var(--border); }
+.work-add-action { padding:0 13px 13px; }
+.work-add-action .add-button { margin:0; min-height:42px; font-size:13px; }
+.notes-card { grid-column:1/-1; min-width:0; border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--surface); }
+.notes-card-head { display:flex; align-items:baseline; gap:8px; padding:12px 13px; min-height:48px; background:var(--soft); border-bottom:1px solid var(--border); font-size:14px; }
+.notes-card-head .optional { font-size:12px; color:var(--muted); }
+.notes-card-body { padding:13px; }
+.notes-list { display:grid; gap:10px; }
+.notes-entry { min-width:0; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.notes-heading { display:flex; justify-content:space-between; align-items:center; padding:9px 12px; min-height:58px; background:var(--soft); border-bottom:1px solid var(--border); }
+.notes-heading label { font-size:14px; font-weight:700; color:var(--ink); }
+.notes-tools { gap:7px; }
+.app.v1 .notes-tools button { border:1px solid var(--border); background:var(--surface); color:var(--ink); }
+.app.v1 .notes-tools button[aria-pressed="true"] { border-color:var(--accent); background:var(--accent); color:var(--accent-ink); }
+.date-popover { max-height:calc(100dvh - 24px); overflow:auto; }
+.note-body { padding:11px 13px 13px; }
+.note-body textarea { margin:0; min-height:68px; }
+.note-body .line-review { padding-top:3px; }
+.notes-card-body > .add-button { min-height:42px; margin:11px 0 0; font-size:13px; }
+.app.v1 .date-wrap[data-date-wrap="date"] .date-popover { left:auto; right:0; }
+.calendar-actions { display:flex; align-items:center; gap:8px; }
+.calendar-actions [data-calendar-clear] { margin-left:auto; }
+.calendar-actions .calendar-close { margin-left:auto; width:34px; min-width:34px; min-height:34px; padding:0; font-size:22px; border:1px solid var(--border); background:var(--surface); color:var(--muted); }
+.calendar-actions [data-calendar-clear] + .calendar-close { margin-left:0; }
+/* Mini step buttons remain planted inside the quantity input on release. */
+.app.v1 .quantity-steps button,
+.app.v1 .quantity-steps button:hover,
+.app.v1 .quantity-steps button:active { transform:none; transition:background-color .12s,color .12s,box-shadow .12s; }
+.app.v1 .quantity-steps button,
+.app.v1 .quantity-steps button:hover,
+.app.v1 .quantity-steps button:active { box-shadow:none; outline:none; transition:background-color .08s,color .08s; }
+.app.v1 .quantity-steps button:first-child { border-top-right-radius:7px; }
+.app.v1 .quantity-steps button:last-child { border-bottom-right-radius:7px; }
+.app.v1 .quantity-steps button:active { background:var(--accent); color:var(--accent-ink); }
+.app.v1 .line-input-shell:has(.quantity-steps):focus-within { outline:2px solid #448ad7; outline-offset:2px; box-shadow:none; }
+.app.v1 .section-tools .reset-button:not(:disabled):hover { background:var(--close-bg); color:var(--close-ink); border-color:var(--close-border); box-shadow:inset 0 0 0 1px var(--close-border); }
+.app,
+.email-overlay { --close-bg:#fff1ef; --close-ink:#b42318; --close-border:#e6aba6; }
+.app.dark,
+.email-overlay.em-dark { --close-bg:#5b2828; --close-ink:#ffb7ae; --close-border:#a9605a; }
+:is(.app,.email-overlay) :is(button[aria-label^="Fermer"],.settings-close,.recent-panel header > button,.remove-line,.payment-remove,[data-remove-note],[data-close-line-assist],[data-cancel-number]):not(:disabled):hover {
+  background:var(--close-bg); color:var(--close-ink); border-color:var(--close-border); box-shadow:inset 0 0 0 1px var(--close-border);
+}
+@media(max-width:800px) {
+  .app.v1 .client-grid .date-popover { width:min(310px,calc(100vw - 50px)); }
+}

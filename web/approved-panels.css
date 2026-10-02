@@ -1,0 +1,64 @@
+/* Approved work option 4, neutral payments register, and fixed note tool rail. */
+.app.v1 .compact-work {display:grid;grid-template-columns:minmax(0,1fr) 40px;gap:10px;padding:12px;background:var(--surface);overflow:visible}
+.app.v1 .compact-work .line-body {padding:0;min-width:0}
+.app.v1 .work-metrics,.app.v1 .work-labels {display:grid;grid-template-columns:40px minmax(0,1fr) 80px minmax(0,1fr);gap:8px;align-items:start}
+.app.v1 .work-metrics label {min-width:0;margin:0}
+.app.v1 .line-number {width:40px;height:40px;display:grid;place-items:center;border:1px solid var(--border);border-radius:50%;background:var(--soft);color:var(--accent);font-size:13px;font-weight:650}
+.app.v1 .compact-work .line-input-shell {margin:0;height:40px;border-radius:8px}
+.app.v1 .compact-work .line-input-shell input {min-width:0;min-height:0;width:100%;height:100%;margin:0;padding:8px;border:0;border-radius:0;background:transparent;box-shadow:none}
+.app.v1 .compact-work .line-amount {height:40px;min-height:40px;min-width:0;display:flex;align-items:center;justify-content:flex-end;margin:0;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--soft);font-size:14px;white-space:nowrap;overflow:hidden}
+.app.v1 .work-labels {font-size:12px;line-height:18px;margin:6px 0;color:var(--muted)}
+.app.v1 .work-labels>div {grid-column:1/3;display:flex;justify-content:space-between;gap:6px;padding-left:6px}
+.app.v1 .work-labels span {display:flex;align-items:center;gap:3px;white-space:nowrap;justify-content:flex-end;padding-right:6px}
+.app.v1 .field-arrow {width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.app.v1 .compact-work textarea {height:64px;min-height:64px;max-height:64px;line-height:21px;padding:10px 12px;resize:none;overflow-y:auto;text-align:left;margin:0}
+.app.v1 .work-tool-rail {display:flex;flex-direction:column;flex-wrap:nowrap;gap:7px;align-items:stretch;justify-content:space-between;grid-column:2;grid-row:1;align-self:start;height:134px}
+.app.v1 .work-tool-rail button {position:static;flex:none;width:40px;height:40px;border-radius:8px}
+.app.v1 .work-tool-rail .remove-line {margin:0;border:1px solid var(--border);background:var(--surface);color:var(--muted)}
+.app.v1 #lines {display:grid;gap:10px}
+.app.v1 #lines .line-entry {margin:0}
+.app.v1 .items-section>.add-button {margin-top:10px}
+.app.v1 :is(.items-section,.payment-card-body,.notes-card-body)>.add-button {text-align:center}
+.app.v1 .optional-fields,.app.v1 .client-notes-section {border-top:1px solid var(--border);border-bottom:0;padding:20px 0 0;margin-top:20px}
+.app.v1 .client-notes-section {padding-bottom:20px;border-bottom:1px solid var(--border)}
+.app.v1 :is(.optional-fields,.client-notes-section)>h4 {font-size:16px;line-height:24px;margin:0 0 12px;font-weight:700}
+.app.v1 :is(.optional-fields,.client-notes-section)>h4 .optional {font-size:12px;font-weight:400;color:var(--muted)}
+.app.v1 .payment-card {border-radius:10px;overflow:visible;background:var(--surface);padding:0}
+.app.v1 .payment-card-head {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 40px;gap:8px;align-items:center;height:44px;min-height:44px;padding:0 10px;background:transparent;border-bottom:1px solid var(--border);font-size:13px;font-weight:600}
+.app.v1 .payment-labels>span:nth-child(2) {position:relative;display:flex;align-items:center;align-self:stretch;padding-left:6px}
+.app.v1 .payment-labels>span:nth-child(2)::before {content:"";position:absolute;left:-4px;top:0;bottom:0;border-left:1px solid var(--border)}
+.app.v1 .payment-card-body {padding:0}
+.app.v1 .payment-list {display:block;padding:0 10px}
+.app.v1 .payment-entry {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 40px;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center}
+.app.v1 .payment-entry:last-child {border-bottom:0}
+.app.v1 .payment-shell {display:contents}
+.app.v1 .payment-amount {display:flex;position:relative;height:40px;border:1px solid var(--border);border-radius:8px;background:var(--surface);min-width:0;width:auto;flex:none}
+.app.v1 .payment-amount:hover:has(input:not(:disabled)) {border-color:var(--accent)}
+.app.v1 .payment-amount input {width:100%;height:38px;margin:0;border:0;background:transparent;padding:8px 26px 8px 10px;min-width:0}
+.app.v1 .payment-amount>span {position:absolute;right:10px;top:10px;font-size:12px;color:var(--muted)}
+.app.v1 .payment-entry .payment-date {width:100%;height:40px;min-height:40px;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin:0;padding:8px 10px;min-width:0}
+.app.v1 .payment-entry .payment-date {justify-content:space-between;font-weight:400;color:var(--ink)}
+.app.v1 .payment-entry .payment-remove {border-radius:8px}
+.app.v1 .payment-card-body>.add-button {width:calc(100% - 20px);margin:0 10px 10px;min-height:42px}
+.app.v1 .payment-card-body>.payment-total {height:44px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);margin:0;padding:0 10px;font-size:13px}
+.app.v1 .notes-card {border:0;border-radius:0;background:transparent;overflow:visible}
+.app.v1 .notes-card-body {padding:0}
+.app.v1 .notes-entry {display:grid;grid-template-columns:minmax(0,1fr) 40px;gap:10px;padding:10px;background:var(--surface);border-radius:10px;overflow:visible}
+.app.v1 .note-body {min-width:0;padding:0}
+.app.v1 .notes-entry textarea {height:134px;min-height:134px;max-height:134px;resize:none;overflow-y:auto;margin:0}
+.app.v1 .notes-tools {display:flex;flex-direction:column;justify-content:space-between;gap:7px;align-items:stretch}
+.app.v1 .notes-tools button {flex:none;border-radius:8px}
+.app.v1 .tax-selectors {display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.app.v1 .editor {container-type:inline-size;container-name:editor}
+.app.v1 .tax-controls select {width:100%;height:40px;margin-top:5px;border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:6px 10px;color:var(--ink)}
+.app.v1 .tax-controls p {margin:7px 0 0;color:var(--muted);font-size:12px;line-height:18px}
+.app.v1 .paper-totals>.preview-tax-lines {display:block;margin:0;padding:0}
+.app.v1 .preview-tax-lines>div {display:flex;justify-content:space-between;gap:10px;margin:7px 0}
+@container editor (max-width:520px) {
+ .app.v1 .work-metrics {grid-template-columns:40px minmax(0,1fr) 80px}
+ .app.v1 .compact-work .line-amount {grid-column:2/4}
+ .app.v1 .work-labels {display:flex;flex-wrap:wrap;justify-content:space-between}
+ .app.v1 .work-labels>div {flex:1;min-width:180px}
+ .app.v1 .work-tool-rail {height:auto;align-self:stretch}
+}
+@media(max-width:750px) {.app.v1 .tax-selectors {grid-template-columns:1fr}.app.v1 .work-labels {font-size:11px}.app.v1 .work-metrics {grid-template-columns:40px minmax(0,1fr) 70px minmax(0,1fr)}}

@@ -1,0 +1,27 @@
+/* Container colour identifies the form; fields stay on the input surface. */
+.app.v1 :is(.compact-work,.payment-card,.notes-entry) { background:var(--form-tint); }
+.app.v1 :is(.line-number,.compact-work .line-amount) { background:var(--panel); }
+.app.v1 :is(.items-section,.payment-card-body,.notes-card-body) > .add-button { background:var(--panel); }
+.app.v1 :is(.items-section,.payment-card-body,.notes-card-body) > .add-button:hover { background:var(--soft); }
+.app.v1 .tax-controls select { height:45px; min-height:45px; padding:10px 14px; }
+.app.v1 .legacy-tax-confirm { margin:6px 0 0; min-height:32px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--accent); padding:5px 9px; }
+.appearance-options { display:flex; flex-direction:column; gap:22px; }
+.appearance-group { border:0; padding:0; margin:0; min-width:0; }
+.appearance-group legend { padding:0; margin-bottom:10px; font-weight:600; font-size:14px; }
+.appearance-group .theme-choices { width:fit-content; }
+.palette-choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.palette-choice { display:flex; align-items:center; gap:10px; height:50px; border:1px solid var(--border); border-radius:9px; padding:10px 12px; color:var(--ink); background:var(--surface); }
+.palette-choice[aria-pressed="true"] { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+.palette-swatch { display:block; width:26px; height:26px; border-radius:50%; border:1px solid var(--border); background:var(--swatch); }
+.appearance-example { background:var(--form-tint); border:1px solid var(--border); border-radius:10px; padding:12px; }
+.appearance-example span { display:block; font-size:12px; color:var(--muted); margin-bottom:8px; }
+.appearance-example div { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px; font-size:14px; }
+/* A fixed Letter sheet is scaled as a whole, independently of the form. */
+.app.v1 .preview .paper.doc1 { width:680px; height:880px; min-width:680px; min-height:880px; max-height:880px; overflow:visible; border-color:#d4d9d6; border-radius:10px; background:white; }
+.app.v1 .preview-page { container-type:inline-size; }
+.payment-detail { --timeline-x:5px; --timeline-y:16px; }
+.payment-detail::before { left:var(--timeline-x); transform:translateX(-50%); }
+.payment-detail::after { left:var(--timeline-x); top:var(--timeline-y); transform:translate(-50%,-50%); }
+.payment-detail:nth-child(2)::before { top:var(--timeline-y); }
+.payment-detail:last-child::before { bottom:calc(100% - var(--timeline-y)); }
+@media print { .app.v1 .preview .paper.doc1 { height:auto!important; max-height:none!important; overflow:visible!important; zoom:1!important; } }

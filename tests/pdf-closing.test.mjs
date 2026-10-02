@@ -11,21 +11,31 @@ async function inspect(bytes) {
   const normal = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   return doc.getPages().map(page => {
+    assert.deepEqual(page.getSize(), {width:612,height:792}, 'Every physical page is Letter');
     const contents = page.node.Contents();
     assert.ok(contents?.size() > 0, 'PDF page must have a content stream');
     const text = Array.from({ length: contents.size() }, (_, i) =>
       Buffer.from(decodePDFRawStream(doc.context.lookup(contents.get(i))).decode()).toString('latin1')).join('\n');
-    const rows = [...text.matchAll(/BT\s([\s\S]*?)ET/g)].map(([, block]) => {
+    const rows = [], stack = []; let spacing = 0;
+    for (const token of text.matchAll(/(-?[\d.]+) Tw|\b(q|Q)\b|BT([\s\S]*?)ET/g)) {
+      if (token[1] !== undefined) {spacing=Number(token[1]);continue;}
+      if (token[2]==='q') {stack.push(spacing);continue;}
+      if (token[2]==='Q') {assert.ok(stack.length);spacing=stack.pop();continue;}
+      const block=token[3];
       const font = block.match(/\/(Helvetica[^\s]*) ([\d.]+) Tf/);
       const matrix = block.match(/1 0 0 1 ([\d.-]+) ([\d.-]+) Tm/);
       const encoded = block.match(/<([\dA-Fa-f]+)> Tj/);
       assert.ok(font && matrix && encoded, 'Unsupported text operator: update the PDF inspector explicitly');
       const value = new TextDecoder('windows-1252').decode(Buffer.from(encoded[1], 'hex'));
       const size = Number(font[2]), x = Number(matrix[1]), y = Number(matrix[2]);
-      const width = (font[1].includes('Bold') ? bold : normal).widthOfTextAtSize(value, size);
-      return { text: value, x, right: x + width, top: 792 - y - size, bottom: 792 - y };
-    });
-    assert.ok(rows.length > 10, 'Empty extraction is not a passing PDF check');
+      const face = font[1].includes('Bold') ? bold : normal;
+      const width = Array.from(value).reduce((sum,char)=>sum+face.widthOfTextAtSize(char,size),0)
+        + (value.match(/ /g)||[]).length*spacing;
+      rows.push({ text: value, size, x, right: x + width, top: 792 - y - size, bottom: 792 - y });
+    }
+    // A valid supporting page may have one remaining note and a short header.
+    // Require actual non-footer body text, rather than ten arbitrary operators.
+    assert.ok(rows.length >= 6 && rows.some(row=>row.top>=82 && row.bottom<738), 'Empty extraction is not a passing PDF check');
     return rows;
   });
 }
@@ -53,7 +63,17 @@ function checkBounds(pages) {
       const overlapY = Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top);
       assert.ok(overlapX < .5 || overlapY < .5, `Overlapping text: ${left.text} / ${right.text}`);
     }
+    const work=rows.filter(row=>row.x===48 && row.size===10.5);
+    if(work.length) {
+      assert.ok(rows.some(row=>/^(PROJET|PROJECT)$/.test(row.text)), 'Full project identity on every work page');
+      assert.ok(rows.some(row=>/^(DATE DU DOCUMENT|DOCUMENT DATE)$/.test(row.text)), 'Document date on every work page');
+      assert.ok(rows.some(row=>row.text==="Ébénisterie de l'Hermitage inc."), 'Company on every work page');
+      const subtotal=rows.filter(row=>/^(Sous-total de cette page|Subtotal for this page)$/.test(row.text));
+      assert.equal(subtotal.length,0,'Page subtotal is absent from every work page');
+    }
+    if(rows.some(row=>/^(Sous-total|Subtotal)$/.test(row.text))) assert.ok(work.length,'Overall summary shares its page with work');
   }
+  assert.ok(pages.at(-1).some(row=>row.x===48 && row.size===10.5),'Final physical page has work');
 }
 
 test('saved PDF aligns the two-panel recap regardless of table height and language', async () => {
@@ -127,12 +147,14 @@ test('every date/amount pair survives English and French quote/invoice histories
   }
 });
 
-test('near-full recap moves below continuation header, with or without notes/payments', async () => {
+test('near-full supporting details flow before the final work page and recap below its repeated full identity', async () => {
   for(const lines of [0,35,38,39,40,41,42,44,50]) {
     const draft=draftFor(Array.from({length:lines},(_,i)=>`NOTE${i} brief.`).join('\n'),0,18);
     const pages=await inspect(await createPdf(draft,{invoiceNumber:2060}));
     checkBounds(pages);
-    assert.ok(pages.at(-1).filter(r=>r.x===56).every(r=>r.top>=82),'Recap and continuation details below continued header');
+    const final=pages.at(-1),workBottom=Math.max(...final.filter(r=>r.x===48 && r.size===10.5).map(r=>r.bottom));
+    const subtotal=final.find(r=>r.text==='Sous-total');assert.ok(subtotal);
+    assert.ok(subtotal.top>workBottom,'Final recap follows work');
   }
 });
 
@@ -157,6 +179,6 @@ test('a long work description retains every word once across continuation pages'
   draft.items[0].description = Array.from({length:100},(_,i)=>`STEP${i}: Fabrication et ajustement selon les dimensions confirmées. END${i}.`).join('\n');
   const pages = await inspect(await createPdf(draft,{invoiceNumber:2060}));
   checkBounds(pages);
-  const text = pages.flat().filter(r=>r.x===48 && !r.text.startsWith('LIGNE') && r.text!=='DESCRIPTION').map(r=>r.text).join(' ').replace(/\s+/g,' ').trim();
+  const text = pages.flat().filter(r=>r.x===48 && r.size===10.5).map(r=>r.text).join(' ').replace(/\s+/g,' ').trim();
   assert.equal(text,draft.items[0].description.replace(/\s+/g,' ').trim());
 });

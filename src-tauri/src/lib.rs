@@ -17,12 +17,18 @@ mod business_ai;
 mod subscription_ai;
 mod local_asr;
 mod outlook;
+mod taxes;
+#[cfg(test)]
+mod tax_tests;
 
 type AppResult<T> = Result<T, String>;
 const FIRST_INVOICE_NUMBER: u64 = 2060;
 const MAX_INVOICE_NUMBER: u64 = 9_007_199_254_740_990;
 const MAX_PDF_BYTES: usize = 25 * 1024 * 1024;
 const MAX_RECORDS: usize = 10_000;
+const MAX_SAVED_VERSIONS: usize = 1_000;
+const MAX_NOTE_ENTRIES: usize = 500;
+const MAX_NOTES_BYTES: usize = 50_000;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -36,6 +42,8 @@ pub struct Item {
     pub description: String,
     pub quantity: String,
     pub price: String,
+    #[serde(default, rename = "pageBreakBefore", skip_serializing_if = "Option::is_none")]
+    pub page_break_before: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -72,9 +80,13 @@ pub struct Draft {
     pub project: String,
     pub notes: String,
     pub deposit: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note_entries: Option<Vec<String>>,
     #[serde(default)]
     pub payments: Option<Vec<Payment>>,
     pub items: Vec<Item>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tax: Option<taxes::Tax>,
     #[serde(default)]
     pub english_copy: Option<EnglishCopy>,
     #[serde(default)]
@@ -95,6 +107,43 @@ pub struct ExportEntry {
     pub invoice_number: Option<u64>,
     #[serde(default)]
     pub pdf_sha256: Option<String>,
+    #[serde(default)]
+    pub snapshot: Option<Draft>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tax_totals: Option<taxes::Totals>,
+    #[serde(default)]
+    pub sent_receipts: Vec<outlook::SendReceipt>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedVersion {
+    pub version_id: String,
+    pub saved_at: String,
+    pub snapshot: Draft,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentVersion {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub version_type: String,
+    pub created_at: Option<String>,
+    pub draft: Option<Draft>,
+    pub path: Option<String>,
+    pub filename: Option<String>,
+    pub language: Option<String>,
+    pub restorable: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchivedPdf {
+    pub path: String,
+    pub filename: String,
+    pub pdf_bytes: Vec<u8>,
+    pub integrity_verified: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -104,16 +153,26 @@ pub struct Record {
     pub draft: Draft,
     pub updated_at: String,
     pub exports: Vec<ExportEntry>,
+    #[serde(default)]
+    pub saved_versions: Vec<SavedVersion>,
+    // Derived from associated archive receipts, never trusted from a cached JSON field.
+    #[serde(skip_deserializing)]
+    pub sent_at: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StateResponse {
     pub current: Draft,
+    pub current_pdf_path: Option<String>,
     pub records: Vec<Record>,
     pub next_invoice_number: u64,
     pub pdf_directory: String,
     pub using_default_directory: bool,
+    pub invoice_pdf_directory: String,
+    pub quote_pdf_directory: String,
+    pub using_default_invoice_directory: bool,
+    pub using_default_quote_directory: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -167,12 +226,23 @@ struct Store {
     generation: u64,
     current_id: String,
     next_invoice_number: u64,
+    // An explicit reset may place the cursor below historical issued invoices.
+    #[serde(default)]
+    invoice_sequence_reset: bool,
     #[serde(default = "default_ai_provider")]
     ai_provider: String,
     #[serde(skip)]
     ai_provider_migrated: bool,
+    #[serde(skip)]
+    note_entries_migrated: bool,
     #[serde(default)]
     pdf_directory: Option<String>,
+    #[serde(default)]
+    invoice_pdf_directory: Option<String>,
+    #[serde(default)]
+    quote_pdf_directory: Option<String>,
+    #[serde(default)]
+    separate_pdf_directories: bool,
     records: Vec<Record>,
     versions: HashMap<String, Vec<Draft>>,
     pending_export: Option<PendingExport>,
@@ -194,13 +264,16 @@ fn blank_draft(kind: Kind) -> Draft {
         project: String::new(),
         notes: String::new(),
         deposit: String::new(),
+        note_entries: Some(vec![]),
         payments: Some(vec![Payment { amount: String::new(), date: String::new() }]),
         items: vec![Item {
             description: String::new(),
             quantity: "1".into(),
             price: String::new(),
+            page_break_before: None,
         }],
         english_copy: None,
+        tax: Some(taxes::fresh()),
         invoice_number: (kind == Kind::Facture).then_some(FIRST_INVOICE_NUMBER),
         manual_invoice_number: None,
         issued_number: None,
@@ -215,14 +288,21 @@ impl Store {
             generation: 0,
             current_id: draft.id.clone(),
             next_invoice_number: FIRST_INVOICE_NUMBER,
+            invoice_sequence_reset: false,
             ai_provider: default_ai_provider(),
             ai_provider_migrated: false,
+            note_entries_migrated: false,
             pdf_directory: None,
+            invoice_pdf_directory: None,
+            quote_pdf_directory: None,
+            separate_pdf_directories: true,
             records: vec![Record {
                 id: draft.id.clone(),
                 draft,
                 updated_at: Utc::now().to_rfc3339(),
                 exports: vec![],
+                saved_versions: vec![],
+                sent_at: None,
             }],
             versions: HashMap::new(),
             pending_export: None,
@@ -249,20 +329,47 @@ impl Store {
 
     fn response(&self, default_output_dir: &Path) -> AppResult<StateResponse> {
         let mut records = self.records.clone();
+        for record in &mut records {
+            record.sent_at = record.exports.iter().flat_map(|export| &export.sent_receipts)
+                .max_by_key(|receipt| chrono::DateTime::parse_from_rfc3339(&receipt.accepted_at).ok())
+                .map(|receipt| receipt.accepted_at.clone());
+        }
         records.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-        let current = records
+        let mut current = records
             .iter()
             .find(|record| record.id == self.current_id)
             .ok_or_else(|| "Le document courant est introuvable.".to_string())?
             .draft
             .clone();
+        // Only the editor's active copy migrates. Library/history entries stay exact.
+        taxes::migrate_editable(&mut current);
+        let path_for = |kind| self.configured_directory(kind).cloned().unwrap_or_else(|| {
+            if self.separate_pdf_directories {
+                default_output_dir.parent().unwrap_or(default_output_dir)
+                    .join(if kind == Kind::Facture { "Factures" } else { "Soumissions" })
+                    .to_string_lossy().into_owned()
+            } else { default_output_dir.to_string_lossy().into_owned() }
+        });
+        let pdf_directory = path_for(current.kind);
+        let using_default_directory = self.configured_directory(current.kind).is_none();
         Ok(StateResponse {
+            current_pdf_path: records.iter().find(|record| record.id == self.current_id)
+                .and_then(|record| record.exports.last()).map(|export| export.path.clone()),
             current,
             records,
             next_invoice_number: self.next_invoice_number,
-            pdf_directory: self.pdf_directory.clone().unwrap_or_else(|| default_output_dir.to_string_lossy().into_owned()),
-            using_default_directory: self.pdf_directory.is_none(),
+            pdf_directory,
+            using_default_directory,
+            invoice_pdf_directory: path_for(Kind::Facture),
+            quote_pdf_directory: path_for(Kind::Soumission),
+            using_default_invoice_directory: self.configured_directory(Kind::Facture).is_none(),
+            using_default_quote_directory: self.configured_directory(Kind::Soumission).is_none(),
         })
+    }
+
+    fn configured_directory(&self, kind: Kind) -> Option<&String> {
+        if !self.separate_pdf_directories { return self.pdf_directory.as_ref(); }
+        match kind { Kind::Facture => self.invoice_pdf_directory.as_ref(), Kind::Soumission => self.quote_pdf_directory.as_ref() }
     }
 }
 
@@ -289,15 +396,17 @@ impl Repository {
         self.documents_dir.join("Entreprise").join("À classer")
     }
 
-    fn selected_output_dir(&self, store: &Store) -> AppResult<PathBuf> {
-        if let Some(path) = &store.pdf_directory {
+    fn selected_output_dir(&self, store: &Store, kind: Kind) -> AppResult<PathBuf> {
+        if let Some(path) = store.configured_directory(kind) {
             let dir = PathBuf::from(path);
             if !dir.is_dir() {
                 return Err(format!("Le dossier des PDF n'est plus disponible : {path}. Choisissez un autre dossier."));
             }
             Ok(dir)
         } else {
-            Ok(self.output_dir())
+            Ok(if store.separate_pdf_directories {
+                self.documents_dir.join("Entreprise").join(if kind == Kind::Facture { "Factures" } else { "Soumissions" })
+            } else { self.output_dir() })
         }
     }
 
@@ -313,10 +422,10 @@ impl Repository {
         };
         let bytes = serde_json::to_vec_pretty(&chosen)
             .map_err(|e| format!("Impossible de préparer la récupération : {e}"))?;
-        if !matches!(&primary, Ok(Some(s)) if s.generation == chosen.generation && !s.ai_provider_migrated) {
+        if !matches!(&primary, Ok(Some(s)) if s.generation == chosen.generation && !s.ai_provider_migrated && !s.note_entries_migrated) {
             let _ = atomic_replace(&self.primary(), &bytes);
         }
-        if !matches!(&backup, Ok(Some(s)) if s.generation == chosen.generation && !s.ai_provider_migrated) {
+        if !matches!(&backup, Ok(Some(s)) if s.generation == chosen.generation && !s.ai_provider_migrated && !s.note_entries_migrated) {
             let _ = atomic_replace(&self.backup(), &bytes);
         }
         Ok(chosen)
@@ -339,7 +448,7 @@ impl Repository {
 
     fn reconcile_pending(&self, store: &mut Store) -> AppResult<()> {
         if let Some(pending) = store.pending_export.clone() {
-            let output_dir = match self.selected_output_dir(store) {
+            let output_dir = match self.selected_output_dir(store, pending.snapshot.kind) {
                 Ok(path) => path,
                 Err(_) => return Ok(()), // Keep an unfinished export until its chosen folder is available again.
             };
@@ -390,6 +499,8 @@ impl Repository {
             draft,
             updated_at: Utc::now().to_rfc3339(),
             exports: vec![],
+            saved_versions: vec![],
+            sent_at: None,
         });
         self.commit(&mut store)?;
         store.response(&self.output_dir())
@@ -416,6 +527,7 @@ impl Repository {
             .pop()
             .ok_or("Aucune version précédente pour ce document.")?;
         let current = store.records[index].draft.clone();
+        preserve_restored_current(&mut store.records[index], &current)?;
         previous.issued_number = current.issued_number;
         if current.issued_number.is_some() {
             previous.kind = Kind::Facture;
@@ -458,44 +570,39 @@ impl Repository {
                 "Numéro trop grand pour être affiché sans erreur dans l'application.".into(),
             );
         }
-        if number < store.next_invoice_number {
-            if !allow_reuse {
-                return Err(format!("Le numéro {number} précède le prochain numéro automatique ({}). Confirmez son utilisation dans l'application.", store.next_invoice_number));
-            }
-            let index = store.index(&store.current_id)?;
-            if store.records[index].draft.kind != Kind::Facture {
-                return Err("Ouvrez une facture pour lui attribuer cet ancien numéro.".into());
-            }
-            if store.records[index].draft.issued_number.is_some() {
-                if store.records.len() >= MAX_RECORDS {
-                    return Err("Trop de documents enregistrés pour créer une nouvelle facture.".into());
-                }
-                let mut draft = blank_draft(Kind::Facture);
-                draft.manual_invoice_number = Some(number);
-                draft.invoice_number = Some(number);
-                store.current_id = draft.id.clone();
-                store.records.push(Record {
-                    id: draft.id.clone(),
-                    draft,
-                    updated_at: Utc::now().to_rfc3339(),
-                    exports: vec![],
-                });
-            } else {
-                store.records[index].draft.manual_invoice_number = Some(number);
-                store.records[index].updated_at = Utc::now().to_rfc3339();
-            }
-        } else {
-            store.next_invoice_number = number;
-            let index = store.index(&store.current_id)?;
-            if store.records[index].draft.issued_number.is_none() {
-                store.records[index].draft.manual_invoice_number = None;
-            }
+        let reused = store.records.iter().any(|record| record.draft.issued_number == Some(number));
+        if (number < store.next_invoice_number || reused) && !allow_reuse {
+            return Err(format!("Le numéro {number} a déjà été utilisé ou précède le prochain numéro automatique ({}). Confirmez le nouveau point de départ dans l'application.", store.next_invoice_number));
         }
+        let index = store.index(&store.current_id)?;
+        if store.records[index].draft.kind == Kind::Facture && store.records[index].draft.issued_number.is_some() {
+            if store.records.len() >= MAX_RECORDS {
+                return Err("Trop de documents enregistrés pour créer une nouvelle facture.".into());
+            }
+            let mut draft = blank_draft(Kind::Facture);
+            draft.invoice_number = Some(number);
+            store.current_id = draft.id.clone();
+            store.records.push(Record {
+                id: draft.id.clone(), draft,
+                updated_at: Utc::now().to_rfc3339(), exports: vec![], saved_versions: vec![], sent_at: None,
+            });
+        }
+        store.next_invoice_number = number;
+        store.invoice_sequence_reset = true;
+        // Issued invoices stay immutable; unissued invoices follow the chosen cursor.
+        for record in &mut store.records {
+            if record.draft.issued_number.is_none() { record.draft.manual_invoice_number = None; }
+        }
+        let current = store.index(&store.current_id)?;
+        if store.records[current].draft.kind == Kind::Facture {
+            store.records[current].draft.manual_invoice_number = reused.then_some(number);
+        }
+        store.records[current].updated_at = Utc::now().to_rfc3339();
         self.commit(&mut store)?;
         store.response(&self.output_dir())
     }
 
-    fn set_output_directory(&self, path: Option<String>) -> AppResult<StateResponse> {
+    fn set_output_directory(&self, path: Option<String>, kind: Kind) -> AppResult<StateResponse> {
         let mut store = self.load()?;
         self.reconcile_pending(&mut store)?;
         if store.pending_export.is_some() {
@@ -513,18 +620,190 @@ impl Repository {
             fs::remove_file(&probe)
                 .map_err(|e| format!("Le test du dossier n'a pas pu être nettoyé : {e}"))?;
         }
-        store.pdf_directory = path;
+        if !store.separate_pdf_directories {
+            let legacy = store.pdf_directory.clone().unwrap_or_else(|| self.output_dir().to_string_lossy().into_owned());
+            store.invoice_pdf_directory = Some(legacy.clone());
+            store.quote_pdf_directory = Some(legacy);
+            store.separate_pdf_directories = true;
+        }
+        match kind { Kind::Facture => store.invoice_pdf_directory = path, Kind::Soumission => store.quote_pdf_directory = path }
+        self.commit(&mut store)?;
+        store.response(&self.output_dir())
+    }
+
+    fn delete_draft(&self, id: &str, expected_draft: Draft) -> AppResult<StateResponse> {
+        let mut store = self.load()?;
+        // Do not reconcile or discard a possibly completed export during deletion.
+        if store.pending_export.is_some() {
+            return Err("Un PDF doit être finalisé avant de supprimer un brouillon. Rechargez les documents.".into());
+        }
+        let index = store.index(id)?;
+        let record = &store.records[index];
+        let issued_history = record.saved_versions.iter().any(|version| version.snapshot.issued_number.is_some())
+            || store.versions.get(id).is_some_and(|versions| versions.iter().any(|draft| draft.issued_number.is_some()));
+        if !record.exports.is_empty() || record.draft.issued_number.is_some() || issued_history {
+            return Err("Ce document est émis ou possède un PDF. Il ne peut pas être supprimé.".into());
+        }
+        if expected_draft.id != id || expected_draft != record.draft {
+            return Err("Le brouillon a changé. Vérifiez-le à nouveau avant de confirmer sa suppression.".into());
+        }
+        let kind = record.draft.kind;
+        let was_current = store.current_id == id;
+        store.records.remove(index);
+        store.versions.remove(id);
+        if was_current {
+            let draft = blank_draft(kind);
+            store.current_id = draft.id.clone();
+            store.records.push(Record {
+                id: draft.id.clone(), draft, updated_at: Utc::now().to_rfc3339(),
+                exports: vec![], saved_versions: vec![], sent_at: None,
+            });
+        }
+        self.commit(&mut store)?;
+        store.response(&self.output_dir())
+    }
+
+    fn load_document_versions(&self, id: &str) -> AppResult<Vec<DocumentVersion>> {
+        let store = self.load()?;
+        let record = &store.records[store.index(id)?];
+        let mut versions: Vec<DocumentVersion> = record.exports.iter().map(|export| DocumentVersion {
+            id: export_version_id(&export.path), version_type: "export".into(),
+            created_at: Some(export.exported_at.clone()), draft: export.snapshot.clone(),
+            path: Some(export.path.clone()), filename: Some(export.filename.clone()),
+            language: Some(export.language.clone()), restorable: export.snapshot.is_some(),
+        }).chain(record.saved_versions.iter().map(|version| DocumentVersion {
+            id: version.version_id.clone(), version_type: "recovery".into(),
+            created_at: Some(version.saved_at.clone()), draft: Some(version.snapshot.clone()),
+            path: None, filename: None, language: None, restorable: true,
+        })).collect();
+        versions.sort_by(|a, b| b.created_at.cmp(&a.created_at).then_with(|| a.id.cmp(&b.id)));
+        // Legacy edit recovery has no timestamp. IDs bind selection to exact content, not a moving index.
+        if let Some(recovery) = store.versions.get(id) {
+            for draft in recovery.iter().rev() {
+                versions.push(DocumentVersion {
+                    id: recovery_version_id(draft)?, version_type: "recovery".into(),
+                    created_at: None, draft: Some(draft.clone()), path: None, filename: None,
+                    language: None, restorable: true,
+                });
+            }
+        }
+        let mut seen = HashSet::new();
+        versions.retain(|version| seen.insert(version.id.clone()));
+        Ok(versions)
+    }
+
+    fn restore_document_version(&self, id: &str, version_id: &str) -> AppResult<StateResponse> {
+        let mut store = self.load()?;
+        if store.pending_export.is_some() {
+            return Err("Terminez l'export en attente avant de restaurer une version.".into());
+        }
+        let index = store.index(id)?;
+        let record = &store.records[index];
+        let mut selected = if let Some(export) = record.exports.iter()
+            .find(|export| export_version_id(&export.path) == version_id) {
+            export.snapshot.clone().ok_or("Cette ancienne copie PDF ne contient pas de brouillon restaurable.")?
+        } else if let Some(version) = record.saved_versions.iter().find(|version| version.version_id == version_id) {
+            version.snapshot.clone()
+        } else {
+            store.versions.get(id).into_iter().flatten()
+                .find(|draft| recovery_version_id(draft).is_ok_and(|key| key == version_id))
+                .cloned().ok_or("Version introuvable ou périmée. Rechargez les versions précédentes.")?
+        };
+        let current = store.records[index].draft.clone();
+        // Historical fields are exact; issuance and reuse acknowledgement remain backend-owned.
+        let selected_recovery = version_id.starts_with("recovery:")
+            && !store.records[index].saved_versions.iter().any(|version| version.version_id == version_id);
+        if selected_recovery {
+            if store.records[index].saved_versions.len() + 2 > MAX_SAVED_VERSIONS {
+                return Err("L'historique des restaurations est plein. Aucune version n'a été supprimée.".into());
+            }
+            // Promote the selected ring entry so later autosaves cannot evict the chosen version.
+            store.records[index].saved_versions.push(SavedVersion {
+                version_id: version_id.to_owned(), saved_at: Utc::now().to_rfc3339(), snapshot: selected.clone(),
+            });
+        }
+        selected.issued_number = current.issued_number;
+        if current.issued_number.is_some() {
+            selected.kind = Kind::Facture;
+            selected.manual_invoice_number = current.manual_invoice_number;
+        } else {
+            selected.manual_invoice_number = None;
+        }
+        selected.invoice_number = if selected.kind == Kind::Facture {
+            current.issued_number.or(Some(store.next_invoice_number))
+        } else { None };
+        validate_draft(&selected)?;
+        preserve_restored_current(&mut store.records[index], &current)?;
+        push_version(store.versions.entry(id.to_owned()).or_default(), current);
+        store.records[index].draft = selected;
+        store.records[index].updated_at = Utc::now().to_rfc3339();
+        store.current_id = id.to_owned();
+        self.commit(&mut store)?;
+        store.response(&self.output_dir())
+    }
+
+    fn read_document_pdf(&self, id: &str, path: &str) -> AppResult<ArchivedPdf> {
+        use std::io::Read;
+        let store = self.load()?;
+        let export = store.records[store.index(id)?].exports.iter()
+            .find(|export| export.path == path)
+            .ok_or("Ce PDF n'est pas enregistré pour ce document.")?;
+        let mut file = fs::File::open(&export.path).map_err(|_| "Le PDF archivé ne peut pas être ouvert.")?;
+        let metadata = file.metadata().map_err(|_| "Le PDF archivé ne peut pas être vérifié.")?;
+        if !metadata.is_file() || metadata.len() > MAX_PDF_BYTES as u64 {
+            return Err("Le PDF archivé n'est pas un fichier ou dépasse la taille permise.".into());
+        }
+        let mut bytes = Vec::new();
+        (&mut file).take(MAX_PDF_BYTES as u64 + 1).read_to_end(&mut bytes)
+            .map_err(|_| "Le PDF archivé ne peut pas être lu.")?;
+        validate_pdf(&bytes)?;
+        if export.pdf_sha256.as_ref().is_some_and(|hash| *hash != format!("{:x}", Sha256::digest(&bytes))) {
+            return Err("Le PDF a été modifié depuis son enregistrement.".into());
+        }
+        Ok(ArchivedPdf { path: export.path.clone(), filename: export.filename.clone(),
+            pdf_bytes: bytes, integrity_verified: export.pdf_sha256.is_some() })
+    }
+
+    fn record_sent_receipt(&self, id: &str, path: &str, hash: &str, receipt: outlook::SendReceipt) -> AppResult<()> {
+        validate_sent_receipt(&receipt)?;
+        let mut store = self.load()?;
+        let index = store.index(id)?;
+        let export = store.records[index].exports.iter_mut()
+            .find(|export| export.path == path && export.pdf_sha256.as_deref() == Some(hash))
+            .ok_or("Le PDF accepté ne correspond plus à son archive enregistrée.")?;
+        if let Some(existing) = export.sent_receipts.iter().find(|entry| entry.attempt_id == receipt.attempt_id) {
+            if existing != &receipt { return Err("Reçu Outlook incohérent pour cette tentative.".into()); }
+            return Ok(());
+        }
+        export.sent_receipts.push(receipt);
+        self.commit(&mut store)
+    }
+
+    fn confirm_invoice_number_reuse(&self, id: &str, expected_number: u64) -> AppResult<StateResponse> {
+        let mut store = self.load()?;
+        self.reconcile_pending(&mut store)?;
+        if store.pending_export.is_some() { return Err("Terminez l'export en attente avant de confirmer le numéro.".into()); }
+        let index = store.index(id)?;
+        let draft = &store.records[index].draft;
+        if draft.kind != Kind::Facture || draft.issued_number.is_some()
+            || draft.invoice_number != Some(expected_number) {
+            return Err("Le numéro du document a changé. Ouvrez à nouveau la facture.".into());
+        }
+        store.records[index].draft.manual_invoice_number = Some(expected_number);
         self.commit(&mut store)?;
         store.response(&self.output_dir())
     }
 
     fn export_pdf(
         &self,
-        draft: Draft,
+        mut draft: Draft,
         pdf_bytes: Vec<u8>,
         expected_invoice_number: Option<u64>,
         language: String,
     ) -> AppResult<ExportResponse> {
+        migrate_draft_notes(&mut draft);
+        let original_editable = draft.clone();
+        taxes::migrate_editable(&mut draft);
         if language != "fr" && language != "en" {
             return Err("Langue invalide : utilisez fr ou en.".into());
         }
@@ -534,7 +813,7 @@ impl Repository {
             validate_english_copy(&draft)?;
         }
         let mut store = self.load()?;
-        let output_dir = self.selected_output_dir(&store)?;
+        let output_dir = self.selected_output_dir(&store, draft.kind)?;
         let index = store.index(&draft.id)?;
         let issued = store.records[index].draft.issued_number;
         if issued.is_some() && draft.kind != Kind::Facture {
@@ -548,6 +827,10 @@ impl Repository {
         if issued.is_none() && number.is_some_and(|n| n > MAX_INVOICE_NUMBER) {
             return Err("La plage de numéros de facture est épuisée.".into());
         }
+        if issued.is_none() && number.is_some_and(|n| store.records.iter().any(|r| r.draft.issued_number == Some(n)))
+            && store.records[index].draft.manual_invoice_number != number {
+            return Err("Ce numéro de facture existe déjà. Confirmez sa réutilisation avant de créer le PDF.".into());
+        }
         if expected_invoice_number != number {
             return Err(format!(
                 "Numéro de facture périmé. Rechargez le document; numéro actuel : {}.",
@@ -557,11 +840,11 @@ impl Repository {
 
         // A prior write may have finished before the state commit. Complete it first.
         if let Some(pending) = store.pending_export.clone() {
-            let path = output_dir.join(&pending.filename);
+            let path = self.selected_output_dir(&store, pending.snapshot.kind)?.join(&pending.filename);
             if file_matches_hash(&path, &pending.pdf_sha256) {
                 self.finalize_pending(&mut store)?;
                 if pending.id == draft.id
-                    && pending.snapshot == draft
+                    && (pending.snapshot == draft || pending.snapshot == original_editable)
                     && pending.language == language
                 {
                     let snapshot = store.records[store.index(&pending.id)?].draft.clone();
@@ -615,7 +898,7 @@ impl Repository {
             exported_at: Utc::now().to_rfc3339(),
         });
         self.commit(&mut store)?;
-        if store.pdf_directory.is_none() {
+        if store.configured_directory(snapshot.kind).is_none() {
             fs::create_dir_all(&output_dir)
                 .map_err(|e| format!("Impossible de créer le dossier de sortie : {e}"))?;
         }
@@ -694,7 +977,7 @@ impl Repository {
             .pending_export
             .clone()
             .ok_or("Aucun export à terminer.")?;
-        let path = self.selected_output_dir(store)?.join(&pending.filename);
+        let path = self.selected_output_dir(store, pending.snapshot.kind)?.join(&pending.filename);
         if !file_matches_hash(&path, &pending.pdf_sha256) {
             return Err(
                 "Le PDF en attente est absent ou modifié; le numéro n'a pas été émis.".into(),
@@ -722,6 +1005,9 @@ impl Repository {
             .iter()
             .any(|entry| entry.path == path.to_string_lossy())
         {
+            let mut archived_snapshot = pending.snapshot;
+            archived_snapshot.issued_number = pending.invoice_number;
+            archived_snapshot.invoice_number = pending.invoice_number;
             store.records[index].exports.push(ExportEntry {
                 path: path.to_string_lossy().into_owned(),
                 filename: pending.filename,
@@ -729,6 +1015,9 @@ impl Repository {
                 language: pending.language,
                 invoice_number: pending.invoice_number,
                 pdf_sha256: Some(pending.pdf_sha256),
+                tax_totals: taxes::totals(&archived_snapshot),
+                snapshot: Some(archived_snapshot),
+                sent_receipts: vec![],
             });
         }
         store.records[index].updated_at = Utc::now().to_rfc3339();
@@ -737,12 +1026,65 @@ impl Repository {
     }
 }
 
+fn export_version_id(path: &str) -> String {
+    format!("export:{:x}", Sha256::digest(path.as_bytes()))
+}
+
+fn recovery_version_id(draft: &Draft) -> AppResult<String> {
+    let bytes = serde_json::to_vec(draft).map_err(|_| "Version de brouillon illisible.")?;
+    Ok(format!("recovery:{:x}", Sha256::digest(&bytes)))
+}
+
+fn matches_recovery_version_id(draft: &Draft, id: &str) -> bool {
+    if recovery_version_id(draft).is_ok_and(|current| current == id) { return true; }
+    // Pre-noteEntries IDs hash the original scalar draft. Accept that exact
+    // identity only for lossless single-entry or empty-note migration, never arbitrary rows.
+    let empty_migration = draft.notes.is_empty()
+        && draft.note_entries.as_ref().is_some_and(Vec::is_empty);
+    if empty_migration || draft.note_entries.as_deref() == Some(std::slice::from_ref(&draft.notes)) {
+        let mut legacy = draft.clone();
+        legacy.note_entries = None;
+        return recovery_version_id(&legacy).is_ok_and(|previous| previous == id);
+    }
+    false
+}
+
+fn preserve_restored_current(record: &mut Record, current: &Draft) -> AppResult<()> {
+    if record.saved_versions.len() >= MAX_SAVED_VERSIONS {
+        return Err("L'historique des restaurations est plein. Aucune version n'a été supprimée.".into());
+    }
+    record.saved_versions.push(SavedVersion {
+        version_id: format!("history:{}", Uuid::new_v4()),
+        saved_at: Utc::now().to_rfc3339(), snapshot: current.clone(),
+    });
+    Ok(())
+}
+
+fn validate_sent_receipt(receipt: &outlook::SendReceipt) -> AppResult<()> {
+    if Uuid::parse_str(&receipt.attempt_id).is_err()
+        || chrono::DateTime::parse_from_rfc3339(&receipt.accepted_at).is_err()
+        || receipt.sender_email.len() > 254 || !receipt.sender_email.contains('@')
+        || receipt.sender_email.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err("Reçu Outlook enregistré invalide.".into());
+    }
+    Ok(())
+}
+
 fn update_draft(store: &mut Store, mut incoming: Draft) -> AppResult<()> {
     migrate_draft_payments(&mut incoming);
+    migrate_draft_notes(&mut incoming);
+    taxes::migrate_editable(&mut incoming);
     let index = store.index(&incoming.id)?;
     let old = store.records[index].draft.clone();
     if old.issued_number.is_some() && incoming.kind != Kind::Facture {
         return Err("Une facture émise doit rester une facture.".into());
+    }
+    if old.kind != Kind::Soumission && incoming.kind == Kind::Soumission
+        && incoming.valid_until.trim().is_empty() && valid_date(&incoming.date)
+    {
+        let document_date = NaiveDate::parse_from_str(&incoming.date, "%Y-%m-%d")
+            .map_err(|_| "Date du document invalide.".to_string())?;
+        incoming.valid_until = (document_date + Duration::days(30)).format("%Y-%m-%d").to_string();
     }
     incoming.issued_number = old.issued_number;
     incoming.manual_invoice_number = if incoming.kind == Kind::Facture { old.manual_invoice_number } else { None };
@@ -777,6 +1119,7 @@ fn valid_date(value: &str) -> bool {
 }
 
 fn validate_draft(draft: &Draft) -> AppResult<()> {
+    taxes::validate(draft)?;
     Uuid::parse_str(&draft.id).map_err(|_| "Identifiant de document invalide.".to_string())?;
     if draft.manual_invoice_number.is_some_and(|n| n == 0 || n > MAX_INVOICE_NUMBER)
         || (draft.kind == Kind::Soumission && draft.manual_invoice_number.is_some())
@@ -791,7 +1134,7 @@ fn validate_draft(draft: &Draft) -> AppResult<()> {
         ("contact", &draft.contact, 500),
         ("courriel", &draft.email, 500),
         ("projet", &draft.project, 500),
-        ("notes", &draft.notes, 50_000),
+        ("notes", &draft.notes, MAX_NOTES_BYTES),
         ("dépôt", &draft.deposit, 100),
     ] {
         if value.len() > limit
@@ -802,6 +1145,18 @@ fn validate_draft(draft: &Draft) -> AppResult<()> {
             return Err(format!(
                 "Champ {label} trop long ou contenant un caractère invalide."
             ));
+        }
+    }
+    if let Some(entries) = &draft.note_entries {
+        if entries.len() > MAX_NOTE_ENTRIES {
+            return Err("Maximum de 500 notes par document.".into());
+        }
+        if entries.iter().any(|entry| entry.len() > MAX_NOTES_BYTES
+            || entry.chars().any(|ch| ch.is_control() && !matches!(ch, '\n' | '\r' | '\t'))) {
+            return Err("Une note est trop longue ou contient un caractère invalide.".into());
+        }
+        if notes_mirror(entries) != draft.notes {
+            return Err("Le texte des notes ne correspond pas à leurs entrées. Aucune note n'a été remplacée.".into());
         }
     }
     for (label, value) in [
@@ -906,11 +1261,15 @@ fn parse_nonnegative(value: &str) -> Option<f64> {
 
 fn validate_export_draft(draft: &Draft) -> AppResult<()> {
     validate_draft(draft)?;
+    taxes::validate_export(draft)?;
     if !valid_date(&draft.date) {
         return Err("La date du document est requise.".into());
     }
     if draft.kind == Kind::Soumission && !valid_date(&draft.valid_until) {
         return Err("La date de validité de la soumission est requise.".into());
+    }
+    if draft.project.trim().is_empty() {
+        return Err("Le nom du projet est requis.".into());
     }
     if draft.client.trim().is_empty() {
         return Err("Le nom du client est requis.".into());
@@ -1017,7 +1376,7 @@ fn validate_store(store: &Store) -> AppResult<()> {
     {
         return Err("État des documents invalide.".into());
     }
-    if let Some(path) = &store.pdf_directory {
+    for path in [&store.pdf_directory, &store.invoice_pdf_directory, &store.quote_pdf_directory].into_iter().flatten() {
         if path.len() > 4096 || path.contains('\0') || !Path::new(path).is_absolute() {
             return Err("Dossier PDF personnalisé invalide.".into());
         }
@@ -1028,6 +1387,42 @@ fn validate_store(store: &Store) -> AppResult<()> {
         validate_draft(&record.draft)?;
         if record.id != record.draft.id || !ids.insert(record.id.clone()) {
             return Err("Identifiants de document dupliqués ou incohérents.".into());
+        }
+        if record.saved_versions.len() > MAX_SAVED_VERSIONS {
+            return Err("Historique des restaurations trop grand.".into());
+        }
+        let mut version_ids = HashSet::new();
+        for version in &record.saved_versions {
+            if !version_ids.insert(&version.version_id)
+                || !(version.version_id.strip_prefix("history:").is_some_and(|id| Uuid::parse_str(id).is_ok())
+                    || matches_recovery_version_id(&version.snapshot, &version.version_id))
+                || chrono::DateTime::parse_from_rfc3339(&version.saved_at).is_err()
+                || version.snapshot.id != record.id {
+                return Err("Version restaurable invalide.".into());
+            }
+            validate_draft(&version.snapshot)?;
+        }
+        for export in &record.exports {
+            if let Some(totals) = &export.tax_totals {
+                if export.snapshot.as_ref().and_then(taxes::totals).as_ref() != Some(totals) {
+                    return Err("Montants archivés des taxes incohérents.".into());
+                }
+            }
+            if let Some(snapshot) = &export.snapshot {
+                validate_draft(snapshot)?;
+                if snapshot.id != record.id || snapshot.invoice_number != export.invoice_number
+                    || snapshot.issued_number != export.invoice_number
+                    || (snapshot.kind == Kind::Facture) != export.invoice_number.is_some() {
+                    return Err("Brouillon de version PDF incohérent.".into());
+                }
+            }
+            let mut attempts = HashSet::new();
+            for receipt in &export.sent_receipts {
+                validate_sent_receipt(receipt)?;
+                if !attempts.insert(&receipt.attempt_id) {
+                    return Err("Reçu Outlook dupliqué.".into());
+                }
+            }
         }
         if let Some(number) = record.draft.issued_number {
             if record.draft.kind != Kind::Facture
@@ -1044,7 +1439,7 @@ fn validate_store(store: &Store) -> AppResult<()> {
             return Err("Numéro proposé incohérent.".into());
         }
     }
-    if !ids.contains(&store.current_id) || issued.iter().any(|(n, (total, manual))| *n >= store.next_invoice_number || *manual < total.saturating_sub(1)) {
+    if !ids.contains(&store.current_id) || issued.iter().any(|(n, (total, manual))| (!store.invoice_sequence_reset && *n >= store.next_invoice_number) || *manual < total.saturating_sub(1)) {
         return Err("Document courant ou prochain numéro invalide.".into());
     }
     if store.versions.iter().any(|(id, list)| {
@@ -1057,6 +1452,7 @@ fn validate_store(store: &Store) -> AppResult<()> {
         return Err("Versions de récupération invalides.".into());
     }
     if let Some(pending) = &store.pending_export {
+        validate_draft(&pending.snapshot)?;
         if !ids.contains(&pending.id)
             || pending.snapshot.id != pending.id
             || pending.filename.contains(['/', '\\'])
@@ -1100,11 +1496,30 @@ fn read_store(path: &Path) -> AppResult<Option<Store>> {
     };
     let mut store: Store = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
     if matches!(store.ai_provider.as_str(), "openai" | "zai") { store.ai_provider = default_ai_provider(); store.ai_provider_migrated = true; }
-    for record in &mut store.records { migrate_draft_payments(&mut record.draft); }
-    for versions in store.versions.values_mut() {
-        for draft in versions { migrate_draft_payments(draft); }
+    for record in &mut store.records {
+        migrate_draft_payments(&mut record.draft);
+        store.note_entries_migrated |= migrate_draft_notes(&mut record.draft);
+        for version in &mut record.saved_versions {
+            migrate_draft_payments(&mut version.snapshot);
+            store.note_entries_migrated |= migrate_draft_notes(&mut version.snapshot);
+        }
+        for export in &mut record.exports {
+            if let Some(snapshot) = &mut export.snapshot {
+                migrate_draft_payments(snapshot);
+                store.note_entries_migrated |= migrate_draft_notes(snapshot);
+            }
+        }
     }
-    if let Some(pending) = &mut store.pending_export { migrate_draft_payments(&mut pending.snapshot); }
+    for versions in store.versions.values_mut() {
+        for draft in versions {
+            migrate_draft_payments(draft);
+            store.note_entries_migrated |= migrate_draft_notes(draft);
+        }
+    }
+    if let Some(pending) = &mut store.pending_export {
+        migrate_draft_payments(&mut pending.snapshot);
+        store.note_entries_migrated |= migrate_draft_notes(&mut pending.snapshot);
+    }
     validate_store(&store)?;
     Ok(Some(store))
 }
@@ -1113,6 +1528,17 @@ fn migrate_draft_payments(draft: &mut Draft) {
     if draft.payments.is_none() {
         draft.payments = Some(vec![Payment { amount: draft.deposit.clone(), date: String::new() }]);
     }
+}
+
+fn notes_mirror(entries: &[String]) -> String {
+    entries.iter().filter(|entry| !entry.is_empty()).map(String::as_str).collect::<Vec<_>>().join("\n\n")
+}
+
+fn migrate_draft_notes(draft: &mut Draft) -> bool {
+    if draft.note_entries.is_some() { return false; }
+    // Paragraphs and blank lines belong to this one historical note.
+    draft.note_entries = Some(if draft.notes.is_empty() { vec![] } else { vec![draft.notes.clone()] });
+    true
 }
 
 fn issue(result: &AppResult<Option<Store>>) -> String {
@@ -1264,6 +1690,16 @@ fn open_draft(
 }
 
 #[tauri::command]
+fn delete_draft(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+    id: String,
+    expected_draft: Draft,
+) -> AppResult<StateResponse> {
+    with_repo(app, lock, |repo| repo.delete_draft(&id, expected_draft))
+}
+
+#[tauri::command]
 fn restore_previous(
     app: tauri::AppHandle,
     lock: tauri::State<'_, Mutex<()>>,
@@ -1287,8 +1723,9 @@ fn set_output_directory(
     app: tauri::AppHandle,
     lock: tauri::State<'_, Mutex<()>>,
     path: Option<String>,
+    kind: Kind,
 ) -> AppResult<StateResponse> {
-    with_repo(app, lock, |repo| repo.set_output_directory(path))
+    with_repo(app, lock, |repo| repo.set_output_directory(path, kind))
 }
 
 #[tauri::command]
@@ -1360,8 +1797,9 @@ async fn disconnect_chatgpt(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<
 async fn ai_translate_english(
     app: tauri::AppHandle,
     lock: tauri::State<'_, Mutex<()>>,
-    draft: Draft,
+    mut draft: Draft,
 ) -> AppResult<ai::TranslatedText> {
+    migrate_draft_notes(&mut draft);
     validate_draft(&draft)?;
     let provider = with_repo(app, lock, |repo| {
         let store = repo.load()?;
@@ -1392,6 +1830,16 @@ async fn test_ai_connection(
 #[tauri::command]
 fn start_local_asr(app: tauri::AppHandle, asr: tauri::State<'_, local_asr::LocalAsr>) -> AppResult<String> {
     asr.start(&app)
+}
+
+#[tauri::command]
+async fn ai_proofread_text(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+    source: String,
+) -> AppResult<String> {
+    let provider = with_repo(app, lock, |repo| Ok(repo.load()?.ai_provider))?;
+    ai::proofread_text(&provider, &source).await
 }
 
 #[tauri::command]
@@ -1444,8 +1892,32 @@ fn preview_pdf_filename(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<()>>
             Some(draft.issued_number.or(draft.manual_invoice_number).unwrap_or(store.next_invoice_number))
         } else { None };
         let base = base_filename(draft, number, &language)?;
-        available_filename(&repo.selected_output_dir(&store)?, &base)
+        available_filename(&repo.selected_output_dir(&store, draft.kind)?, &base)
     })
+}
+
+#[tauri::command]
+fn load_document_versions(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<()>>,
+    id: String) -> AppResult<Vec<DocumentVersion>> {
+    with_repo(app, lock, |repo| repo.load_document_versions(&id))
+}
+
+#[tauri::command]
+fn restore_document_version(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<()>>,
+    id: String, version_id: String) -> AppResult<StateResponse> {
+    with_repo(app, lock, |repo| repo.restore_document_version(&id, &version_id))
+}
+
+#[tauri::command]
+fn read_document_pdf(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<()>>,
+    id: String, path: String) -> AppResult<Vec<u8>> {
+    with_repo(app, lock, |repo| repo.read_document_pdf(&id, &path).map(|pdf| pdf.pdf_bytes))
+}
+
+#[tauri::command]
+fn confirm_invoice_number_reuse(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<()>>,
+    draft_id: String, expected_number: u64) -> AppResult<StateResponse> {
+    with_repo(app, lock, |repo| repo.confirm_invoice_number_reuse(&draft_id, expected_number))
 }
 
 #[tauri::command]
@@ -1465,8 +1937,12 @@ async fn disconnect_outlook() -> AppResult<outlook::MailSettings> { outlook::dis
 #[tauri::command]
 async fn send_outlook_mail(app: tauri::AppHandle, lock: tauri::State<'_, Mutex<()>>,
     draft_id: String, path: String, request: outlook::SendRequest) -> AppResult<outlook::SendReceipt> {
-    let (filename, bytes) = with_repo(app, lock, |repo| repo.email_attachment(&draft_id, &path))?;
-    outlook::send(request, filename, bytes).await
+    let (filename, bytes) = with_repo(app.clone(), lock.clone(), |repo| repo.email_attachment(&draft_id, &path))?;
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    let receipt = outlook::send(request, filename, bytes).await?;
+    with_repo(app, lock, |repo| repo.record_sent_receipt(&draft_id, &path, &hash, receipt.clone()))
+        .map_err(|_| "Microsoft a accepté le courriel, mais son statut n'a pas pu être associé au document. Vérifiez Outlook avant tout nouvel envoi.".to_owned())?;
+    Ok(receipt)
 }
 
 #[tauri::command]
@@ -1499,9 +1975,14 @@ pub fn run() {
             save_draft,
             new_draft,
             open_draft,
+            delete_draft,
             restore_previous,
+            load_document_versions,
+            restore_document_version,
+            read_document_pdf,
             set_next_invoice_number,
             set_output_directory,
+            confirm_invoice_number_reuse,
             get_ai_settings,
             set_ai_provider,
             set_ai_key,
@@ -1513,6 +1994,7 @@ pub fn run() {
             ai_translate_english,
             start_local_asr,
             ai_rewrite_line,
+            ai_proofread_text,
             ai_extract_document,
             export_pdf,
             get_mail_settings,
@@ -1534,6 +2016,16 @@ pub fn run() {
 }
 
 #[cfg(test)]
+#[path = "selected_versions_tests.rs"]
+mod selected_versions_tests;
+
+#[cfg(test)]
+mod client_notes_tests;
+
+#[cfg(test)]
+mod draft_deletion_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::TempDir;
@@ -1548,11 +2040,59 @@ mod tests {
 
     fn ready_invoice(repo: &Repository) -> Draft {
         let mut draft = repo.new_draft(Kind::Facture).unwrap().current;
+    draft.tax.as_mut().unwrap().selection = "QC".into();
+    draft.tax = Some(taxes::resolve(&draft));
+        draft.project = "Projet de test".into();
         draft.client = "Peter".into();
         draft.address = "68 chemin des guides".into();
         draft.items[0].description = "Travail".into();
         draft.items[0].price = "100,00".into();
         draft
+    }
+
+    #[test]
+    fn separate_saved_drafts_survive_new_documents_and_restart_without_export() {
+        let (root, repo) = setup();
+        let mut quote = repo.new_draft(Kind::Soumission).unwrap().current;
+        quote.project = "Cuisine à reprendre".into();
+        quote.notes = "Notes conservées sans PDF".into();
+        quote.note_entries = Some(vec![quote.notes.clone()]);
+        let quote_id = quote.id.clone();
+        let saved = repo.save_draft(quote).unwrap();
+        assert_eq!(saved.current.id, quote_id);
+        let mut invoice = repo.new_draft(Kind::Facture).unwrap().current;
+        invoice.project = "Escalier à reprendre".into();
+        invoice.client = "Client de test".into();
+        let invoice_id = invoice.id.clone();
+        repo.save_draft(invoice).unwrap();
+        let records_before = repo.load_state().unwrap().records.len();
+        drop(repo);
+        let reopened = Repository::new(root.path().join("appdata"), root.path().join("Documents"));
+        let state = reopened.load_state().unwrap();
+        assert_eq!(state.records.len(), records_before);
+        assert_eq!(state.next_invoice_number, 2060);
+        assert!(state.records.iter().all(|record| record.exports.is_empty()));
+        let resumed_quote = reopened.open_draft(&quote_id).unwrap().current;
+        assert_eq!(resumed_quote.project, "Cuisine à reprendre");
+        assert_eq!(resumed_quote.notes, "Notes conservées sans PDF");
+        assert!(resumed_quote.issued_number.is_none());
+        let resumed_invoice = reopened.open_draft(&invoice_id).unwrap().current;
+        assert_eq!(resumed_invoice.project, "Escalier à reprendre");
+        assert_eq!(resumed_invoice.client, "Client de test");
+        assert!(resumed_invoice.issued_number.is_none());
+    }
+
+    #[test]
+    fn project_is_required_for_output_but_incomplete_drafts_can_be_saved() {
+        let (_temp, repo) = setup();
+        let mut draft = ready_invoice(&repo);
+        draft.project.clear();
+        let saved = repo.save_draft(draft).unwrap().current;
+        assert!(saved.project.is_empty());
+        assert!(validate_export_draft(&saved).unwrap_err().contains("nom du projet"));
+        let mut complete = saved;
+        complete.project = "Escalier en chêne rouge".into();
+        assert!(validate_export_draft(&complete).is_ok());
     }
 
     #[test]
@@ -1679,6 +2219,7 @@ mod tests {
         let mut draft = ready_invoice(&repo);
         draft.project = "Escalier".into();
         draft.notes = "Installation incluse".into();
+        draft.note_entries = Some(vec![draft.notes.clone()]);
         draft.payments = Some(vec![Payment { amount: "40,25".into(), date: "2026-09-18".into() }, Payment { amount: "15,50".into(), date: "2026-09-25".into() }]);
         draft.english_copy = Some(EnglishCopy {
             source_project: draft.project.clone(),
@@ -1783,7 +2324,7 @@ mod tests {
     }
 
     #[test]
-    fn older_number_requires_confirmation_and_preserves_automatic_sequence() {
+    fn older_number_resets_cursor_and_preserves_issued_documents() {
         let (_temp, repo) = setup();
         assert!(repo.set_next_invoice_number(0, false).is_err());
         assert_eq!(
@@ -1815,10 +2356,13 @@ mod tests {
         let selected = repo.set_next_invoice_number(3000, true).unwrap();
         assert_eq!(selected.current.invoice_number, Some(3000));
         assert_eq!(selected.current.manual_invoice_number, Some(3000));
-        assert_eq!(selected.next_invoice_number, 4000);
+        assert_eq!(selected.next_invoice_number, 3000);
         let mut corrected = selected.current;
+        corrected.project = "Correction".into();
         corrected.client = "Peter".into();
         corrected.address = "68 chemin des guides".into();
+        corrected.tax.as_mut().unwrap().selection = "QC".into();
+        corrected.tax = Some(taxes::resolve(&corrected));
         corrected.items[0].description = "Correction".into();
         corrected.items[0].price = "100".into();
         repo.save_draft(corrected.clone()).unwrap();
@@ -1829,14 +2373,14 @@ mod tests {
         assert!(Path::new(&original.path).exists());
         assert!(Path::new(&exported.path).exists());
         assert_eq!(exported.invoice_number, Some(3000));
-        assert_eq!(repo.load_state().unwrap().next_invoice_number, 4000);
-        assert_eq!(repo.new_draft(Kind::Facture).unwrap().current.invoice_number, Some(4000));
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 3001);
+        assert_eq!(repo.new_draft(Kind::Facture).unwrap().current.invoice_number, Some(3001));
         let unused = repo.set_next_invoice_number(2999, true).unwrap();
         assert_eq!(unused.current.invoice_number, Some(2999));
-        assert_eq!(unused.next_invoice_number, 4000);
+        assert_eq!(unused.next_invoice_number, 2999);
         let gap = repo.set_next_invoice_number(3500, true).unwrap();
         assert_eq!(gap.current.invoice_number, Some(3500));
-        assert_eq!(gap.next_invoice_number, 4000);
+        assert_eq!(gap.next_invoice_number, 3500);
         let mut quote = gap.current;
         quote.kind = Kind::Soumission;
         let quote = repo.save_draft(quote).unwrap().current;
@@ -1844,7 +2388,35 @@ mod tests {
         assert_eq!(quote.invoice_number, None);
         let mut invoice_again = quote;
         invoice_again.kind = Kind::Facture;
-        assert_eq!(repo.save_draft(invoice_again).unwrap().current.invoice_number, Some(4000));
+        assert_eq!(repo.save_draft(invoice_again).unwrap().current.invoice_number, Some(3500));
+    }
+
+    #[test]
+    fn type_switch_defaults_missing_quote_validity_and_preserves_custom_date() {
+        let (_temp, repo) = setup();
+        let mut draft = repo.load_state().unwrap().current;
+        draft.kind = Kind::Facture;
+        draft.date = "2026-12-20".into();
+        draft.valid_until.clear();
+        draft.due_date.clear();
+        draft.project = "Projet conservé".into();
+        let invoice = repo.save_draft(draft).unwrap();
+        let cursor = invoice.next_invoice_number;
+        let mut quote = invoice.current;
+        quote.kind = Kind::Soumission;
+        let quote = repo.save_draft(quote).unwrap();
+        assert_eq!(quote.current.valid_until, "2027-01-19");
+        assert_eq!(quote.current.due_date, "");
+        assert_eq!(quote.current.project, "Projet conservé");
+        assert_eq!(quote.current.invoice_number, None);
+        assert_eq!(quote.next_invoice_number, cursor);
+        assert_eq!(repo.load_state().unwrap().current.valid_until, "2027-01-19");
+        let mut invoice = quote.current;
+        invoice.kind = Kind::Facture;
+        let mut quote = repo.save_draft(invoice).unwrap().current;
+        quote.kind = Kind::Soumission;
+        quote.valid_until = "2027-02-10".into();
+        assert_eq!(repo.save_draft(quote).unwrap().current.valid_until, "2027-02-10");
     }
 
     #[test]
@@ -1854,6 +2426,8 @@ mod tests {
         draft.project = "Armoire".into();
         draft.client = "Peter".into();
         draft.address = "Adresse".into();
+        draft.tax.as_mut().unwrap().selection = "QC".into();
+        draft.tax = Some(taxes::resolve(&draft));
         draft.items[0].description = "Travail".into();
         draft.items[0].price = "100".into();
         draft.kind = Kind::Facture;
@@ -1880,6 +2454,92 @@ mod tests {
     }
 
     #[test]
+    fn dad_cursor_reset_survives_restart_type_switches_and_warns_on_each_reused_number() {
+        let (_root, repo) = setup();
+        let mut originals = Vec::new();
+        for number in 2060..=2062 {
+            let draft = ready_invoice(&repo);
+            let exported = repo.export_pdf(draft, PDF.to_vec(), Some(number), "fr".into()).unwrap();
+            originals.push(exported);
+        }
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 2063);
+        let original_bytes: Vec<_> = originals.iter().map(|e| fs::read(&e.path).unwrap()).collect();
+        let draft = repo.set_next_invoice_number(2060, true).unwrap().current;
+        assert_eq!(draft.invoice_number, Some(2060));
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 2060);
+        let mut quote = draft;
+        quote.kind = Kind::Soumission;
+        let mut invoice = repo.save_draft(quote).unwrap().current;
+        invoice.kind = Kind::Facture;
+        invoice.project = "Correction".into();
+        invoice.client = "Peter".into(); invoice.address = "Adresse".into();
+        invoice.tax.as_mut().unwrap().selection = "QC".into();
+        invoice.tax = Some(taxes::resolve(&invoice));
+        invoice.items[0].description = "Correction".into(); invoice.items[0].price = "100".into();
+        let invoice = repo.save_draft(invoice).unwrap().current;
+        assert_eq!(invoice.invoice_number, Some(2060));
+        assert_eq!(invoice.manual_invoice_number, None);
+        let before = repo.load().unwrap();
+        assert!(repo.export_pdf(invoice.clone(), PDF.to_vec(), Some(2060), "fr".into()).is_err());
+        assert_eq!(repo.load().unwrap().generation, before.generation);
+        assert!(repo.load().unwrap().pending_export.is_none());
+        assert!(repo.confirm_invoice_number_reuse(&invoice.id, 2061).is_err());
+        let confirmed = repo.confirm_invoice_number_reuse(&invoice.id, 2060).unwrap().current;
+        let correction = repo.export_pdf(confirmed, PDF.to_vec(), Some(2060), "fr".into()).unwrap();
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 2061);
+        repo.export_pdf(correction.snapshot, PDF.to_vec(), Some(2060), "fr".into()).unwrap();
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 2061);
+        let next = ready_invoice(&repo);
+        assert_eq!(next.invoice_number, Some(2061));
+        assert!(repo.export_pdf(next.clone(), PDF.to_vec(), Some(2061), "fr".into()).is_err());
+        repo.save_draft(next.clone()).unwrap();
+        let next = repo.confirm_invoice_number_reuse(&next.id, 2061).unwrap().current;
+        repo.export_pdf(next, PDF.to_vec(), Some(2061), "fr".into()).unwrap();
+        assert_eq!(repo.load_state().unwrap().next_invoice_number, 2062);
+        for (original, bytes) in originals.iter().zip(original_bytes) {
+            assert_eq!(fs::read(&original.path).unwrap(), bytes);
+            let saved = repo.open_draft(&original.snapshot.id).unwrap();
+            assert_eq!(saved.current.issued_number, original.invoice_number);
+        }
+    }
+
+    #[test]
+    fn pdf_destinations_are_independent_by_kind_and_legacy_shared_path_is_preserved() {
+        let (root, repo) = setup();
+        let invoices = root.path().join("Factures choisies");
+        let quotes = root.path().join("Soumissions choisies");
+        fs::create_dir(&invoices).unwrap(); fs::create_dir(&quotes).unwrap();
+        repo.set_output_directory(Some(invoices.to_string_lossy().into_owned()), Kind::Facture).unwrap();
+        repo.set_output_directory(Some(quotes.to_string_lossy().into_owned()), Kind::Soumission).unwrap();
+        let invoice = ready_invoice(&repo);
+        let archived = repo.export_pdf(invoice, PDF.to_vec(), Some(2060), "fr".into()).unwrap();
+        assert!(Path::new(&archived.path).starts_with(&invoices));
+        let mut quote = repo.new_draft(Kind::Soumission).unwrap().current;
+        quote.project = "Travail".into();
+        quote.client = "Peter".into(); quote.address = "Adresse".into();
+        quote.tax.as_mut().unwrap().selection = "QC".into();
+        quote.tax = Some(taxes::resolve(&quote));
+        quote.items[0].description = "Travail".into(); quote.items[0].price = "100".into();
+        let archived_quote = repo.export_pdf(quote, PDF.to_vec(), None, "fr".into()).unwrap();
+        assert!(Path::new(&archived_quote.path).starts_with(&quotes));
+        assert_eq!(repo.email_attachment(&archived.snapshot.id, &archived.path).unwrap().1, PDF);
+        assert_eq!(repo.email_attachment(&archived_quote.snapshot.id, &archived_quote.path).unwrap().1, PDF);
+        let state = repo.load_state().unwrap();
+        assert_eq!(state.invoice_pdf_directory, invoices.to_string_lossy());
+        assert_eq!(state.quote_pdf_directory, quotes.to_string_lossy());
+        repo.set_output_directory(None, Kind::Facture).unwrap();
+        assert_eq!(repo.load_state().unwrap().quote_pdf_directory, quotes.to_string_lossy());
+        let mut legacy = repo.load().unwrap();
+        legacy.separate_pdf_directories = false;
+        legacy.pdf_directory = Some(quotes.to_string_lossy().into_owned());
+        repo.commit(&mut legacy).unwrap();
+        let preserved = repo.set_output_directory(Some(invoices.to_string_lossy().into_owned()), Kind::Facture).unwrap();
+        assert_eq!(preserved.quote_pdf_directory, quotes.to_string_lossy());
+        assert_eq!(preserved.invoice_pdf_directory, invoices.to_string_lossy());
+        assert!(Path::new(&archived.path).exists()); assert!(Path::new(&archived_quote.path).exists());
+    }
+
+    #[test]
     fn filenames_stay_inside_intake_and_invalid_inputs_are_rejected() {
         let (_temp, repo) = setup();
         let mut draft = ready_invoice(&repo);
@@ -1887,12 +2547,15 @@ mod tests {
         let exported = repo
             .export_pdf(draft.clone(), PDF.to_vec(), Some(2060), "fr".into())
             .unwrap();
-        assert!(Path::new(&exported.path).starts_with(repo.output_dir()));
+        assert!(Path::new(&exported.path).starts_with(repo.selected_output_dir(&repo.load().unwrap(), Kind::Facture).unwrap()));
         assert!(!exported.filename.contains(['/', '\\', ':', '<', '>']));
         assert!(exported.filename.starts_with("Facture_2060_"));
         let mut quote = repo.new_draft(Kind::Soumission).unwrap().current;
+        quote.project = "Travail".into();
         quote.client = "Peter".into();
         quote.address = "Adresse".into();
+        quote.tax.as_mut().unwrap().selection = "QC".into();
+        quote.tax = Some(taxes::resolve(&quote));
         quote.items[0].description = "Travail".into();
         quote.items[0].price = "0".into();
         let one = repo
@@ -1911,7 +2574,7 @@ mod tests {
         assert!(repo
             .export_pdf(quote, PDF.to_vec(), None, "fr".into())
             .is_err());
-        assert!(repo.output_dir().join(&one.filename).exists());
+        assert!(Path::new(&one.path).exists());
     }
 
     #[test]
@@ -1952,8 +2615,9 @@ mod tests {
             exported_at: Utc::now().to_rfc3339(),
         });
         repo.commit(&mut store).unwrap();
-        fs::create_dir_all(repo.output_dir()).unwrap();
-        fs::write(repo.output_dir().join(&filename), PDF).unwrap();
+        let output = repo.selected_output_dir(&store, Kind::Facture).unwrap();
+        fs::create_dir_all(&output).unwrap();
+        fs::write(output.join(&filename), PDF).unwrap();
         let resumed = repo
             .export_pdf(snapshot, PDF.to_vec(), Some(2060), "fr".into())
             .unwrap();
@@ -2008,8 +2672,9 @@ mod tests {
             exported_at: Utc::now().to_rfc3339(),
         });
         repo.commit(&mut store).unwrap();
-        fs::create_dir_all(repo.output_dir()).unwrap();
-        fs::write(repo.output_dir().join(filename), PDF).unwrap();
+        let output = repo.selected_output_dir(&store, Kind::Facture).unwrap();
+        fs::create_dir_all(&output).unwrap();
+        fs::write(output.join(filename), PDF).unwrap();
         let recovered = repo.load_state().unwrap();
         assert_eq!(recovered.current.issued_number, Some(2060));
         assert_eq!(recovered.next_invoice_number, 2061);
@@ -2032,10 +2697,10 @@ mod tests {
         let chosen = root.path().join("Mes PDF");
         fs::create_dir_all(&chosen).unwrap();
         let chosen_text = chosen.to_string_lossy().into_owned();
-        let configured = repo.set_output_directory(Some(chosen_text.clone())).unwrap();
-        assert_eq!(configured.pdf_directory, chosen_text);
-        assert!(!configured.using_default_directory);
-        assert_eq!(repo.load_state().unwrap().pdf_directory, chosen_text);
+        let configured = repo.set_output_directory(Some(chosen_text.clone()), Kind::Facture).unwrap();
+        assert_eq!(configured.invoice_pdf_directory, chosen_text);
+        assert!(!configured.using_default_invoice_directory);
+        assert_eq!(repo.load_state().unwrap().invoice_pdf_directory, chosen_text);
 
         let draft = ready_invoice(&repo);
         let first = repo
@@ -2051,9 +2716,9 @@ mod tests {
         assert!(second.name_collision);
         assert_eq!(repo.load_state().unwrap().next_invoice_number, 2061);
 
-        let reset = repo.set_output_directory(None).unwrap();
+        let reset = repo.set_output_directory(None, Kind::Facture).unwrap();
         assert!(reset.using_default_directory);
-        assert_eq!(reset.pdf_directory, repo.output_dir().to_string_lossy());
+        assert_eq!(reset.pdf_directory, repo.selected_output_dir(&repo.load().unwrap(), Kind::Facture).unwrap().to_string_lossy());
         assert!(Path::new(&first.path).exists());
     }
 
@@ -2063,7 +2728,7 @@ mod tests {
         let chosen = root.path().join("PDF amovibles");
         fs::create_dir_all(&chosen).unwrap();
         let chosen_text = chosen.to_string_lossy().into_owned();
-        repo.set_output_directory(Some(chosen_text.clone())).unwrap();
+        repo.set_output_directory(Some(chosen_text.clone()), Kind::Facture).unwrap();
         let draft = ready_invoice(&repo);
         fs::remove_dir(&chosen).unwrap();
         let error = repo
@@ -2075,10 +2740,10 @@ mod tests {
         assert_eq!(state.next_invoice_number, 2060);
         assert_eq!(state.current.issued_number, None);
 
-        assert!(repo.set_output_directory(Some("relative-folder".into())).is_err());
+        assert!(repo.set_output_directory(Some("relative-folder".into()), Kind::Facture).is_err());
         let other = root.path().join("Nouveau dossier");
         fs::create_dir_all(&other).unwrap();
-        repo.set_output_directory(Some(other.to_string_lossy().into_owned())).unwrap();
+        repo.set_output_directory(Some(other.to_string_lossy().into_owned()), Kind::Facture).unwrap();
         let exported = repo
             .export_pdf(draft, PDF.to_vec(), Some(2060), "fr".into())
             .unwrap();
@@ -2092,6 +2757,9 @@ mod tests {
         let original = repo.load_state().unwrap();
         let mut legacy: serde_json::Value = serde_json::from_slice(&fs::read(repo.primary()).unwrap()).unwrap();
         legacy.as_object_mut().unwrap().remove("pdfDirectory");
+        for field in ["invoicePdfDirectory", "quotePdfDirectory", "separatePdfDirectories", "invoiceSequenceReset"] {
+            legacy.as_object_mut().unwrap().remove(field);
+        }
         let bytes = serde_json::to_vec(&legacy).unwrap();
         fs::write(repo.primary(), &bytes).unwrap();
         fs::write(repo.backup(), &bytes).unwrap();

@@ -1,5 +1,6 @@
 // Standalone overlay: the document editor may rerender during PDF export.
 // Import email-composer.css from the host entry point.
+import { openPanelMotion, closePanelMotion, releaseAfterMotion } from './interactions.js';
 const remembered = new Map();
 let active = null;
 const text = value => typeof value === 'string' ? value : '';
@@ -187,6 +188,7 @@ export function mailSettingsPayload(values) {
 const icons = {
   mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/>',
   close: '<path d="m6 6 12 12M18 6 6 18"/>', plus: '<path d="M12 5v14M5 12h14"/>',
+  back: '<path d="m10 5-7 7 7 7M3 12h18"/>',
   undo: '<path d="m9 5-6 6 6 6M3 11h12a6 6 0 0 1 6 6"/>',
   ai: '<path d="m12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3zM20 2v4M18 4h4"/>',
   send: '<path d="m3 3 18 9-18 9 4-9-4-9ZM7 12h14"/>',
@@ -280,12 +282,13 @@ function overlay() {
   document.addEventListener('focusin', focusin, true);
   return {
     root,
-    setScope(node, onEscape) { scope = node; escape = onEscape; focusInside(); },
+    setScope(node, onEscape) { scope = node; escape = onEscape; openPanelMotion(node); focusInside(); },
     focus: focusInside,
     destroy() {
       observer.disconnect();
       document.removeEventListener('keydown', keydown, true);
       document.removeEventListener('focusin', focusin, true);
+      if (scope) closePanelMotion(scope);
       root.remove();
       for (const [node, inert] of inertBefore) node.inert = inert;
       document.body.style.overflow = previousOverflow;
@@ -303,13 +306,23 @@ function dialog(title, className) {
   return panel;
 }
 
-function settingsPanel({ host, invoke, initial, onSettings, onClose }) {
-  const panel = dialog('Réglages · Courriel', 'em-settings');
+function settingsPanel({ host, invoke, initial, onSettings, onClose, standalone = false }) {
+  const panel = dialog(standalone ? 'Courriel Outlook' : 'Réglages · Courriel', standalone ? 'em-settings settings-pane' : 'em-settings');
   const layer = el('div', 'em-layer'); layer.append(panel); host.root.append(layer);
   let closed = false, busy = false, settings = initial, timer = null, polling = false, loginRunning = false;
-  const head = el('header', 'em-head');
-  head.append(el('h2', '', 'Réglages · Courriel'), button('Fermer les réglages', close, 'close', true));
-  const content = el('div', 'em-settings-content');
+  const head = el('header', standalone ? 'em-head settings-head' : 'em-head');
+  const back = standalone ? button('Réglages', () => close('back'), 'back') : null;
+  const title = el('h2', standalone ? 'settings-title' : '', standalone ? 'Courriel Outlook' : 'Réglages · Courriel');
+  const dismiss = button('Fermer les réglages', close, 'close', true);
+  if (back) {
+    back.classList.add('em-settings-back', 'settings-back');
+    back.setAttribute('aria-label', 'Retour aux réglages');
+    const heading = el('div', 'settings-heading');
+    heading.append(back, title);
+    dismiss.classList.add('settings-close');
+    head.append(heading, dismiss);
+  } else head.append(title, dismiss);
+  const content = el('div', standalone ? 'em-settings-content settings-body' : 'em-settings-content');
   const account = el('section', 'em-settings-card');
   const accountAddress = el('strong');
   const accountStatus = el('p', 'em-muted'); accountStatus.setAttribute('role', 'status');
@@ -344,6 +357,7 @@ function settingsPanel({ host, invoke, initial, onSettings, onClose }) {
     cancelLogin.hidden = !pending; cancelLogin.disabled = busy;
     disconnect.hidden = !settings?.connected; disconnect.disabled = busy || pending;
     save.disabled = busy || pending || !settings;
+    if (back) back.disabled = busy;
     for (const input of [accountant.input, signature.input, client.input]) input.disabled = busy || pending || !settings;
     panel.setAttribute('aria-busy', String(busy));
   }
@@ -397,13 +411,14 @@ function settingsPanel({ host, invoke, initial, onSettings, onClose }) {
       busy = false; close(); // One native save contains all settings.
     } catch (error) { busy = false; showError(error); renderAccount(); }
   }
-  function close() {
+  function close(reason) {
     if (closed || busy) return;
-    closed = true; clearTimeout(timer); layer.remove();
+    closed = true; clearTimeout(timer); closePanelMotion(panel); layer.remove();
     // Closing settings leaves browser authentication pending in the native layer.
     // The owner can reopen or explicitly cancel it; no credentials are requested here.
-    onClose();
+    onClose(reason === 'back');
   }
+  if (standalone) layer.addEventListener('click', event => { if (event.target === layer) close(); });
   const retry = button('Recharger les réglages', () => refresh(!settings));
   content.append(retry);
   if (initial) accept(initial, true);
@@ -413,15 +428,18 @@ function settingsPanel({ host, invoke, initial, onSettings, onClose }) {
   return { close, focus: () => host.setScope(panel, close), ready };
 }
 
-export function openMailSettings({ invoke, onClose } = {}) {
+export function openMailSettings({ invoke, onClose, onBack } = {}) {
   checkOptions({ invoke });
   if (active) { if (active.settings) return active.settings(); active.focus(); return active; }
   const host = overlay();
+  host.root.classList.add('em-settings-standalone');
   let value = null;
   const controller = { close: () => view.close(), focus: () => view.focus(), snapshot: () => value, ready: null };
   active = controller;
-  const view = settingsPanel({ host, invoke, initial: null, onSettings: settings => { value = settings; }, onClose: () => {
+  const view = settingsPanel({ host, invoke, initial: null, standalone: true, onSettings: settings => { value = settings; }, onClose: returning => {
     active = null; host.destroy(); onClose?.(value);
+    // Main finishes its inertness cleanup before reopening the settings hub.
+    if (returning) onBack?.(value);
   } });
   controller.ready = view.ready;
   return controller;
@@ -458,7 +476,7 @@ export function openEmailComposer(options) {
     const add = button(field === 'to' ? 'Ajouter un destinataire' : 'Ajouter une copie CC', () => {
       if (sending) return;
       model[field].push(''); if (field === 'cc') model.ccTouched = true;
-      renderRecipients(field); recipientInputs[field].at(-1).focus();
+      renderRecipients(field); openPanelMotion(rows[field].list.lastElementChild); recipientInputs[field].at(-1).focus();
     }, 'plus', true);
     row.append(el('span', 'em-row-label', field === 'to' ? 'À' : 'CC'), list, add);
     routing.append(row); rows[field] = { list, add };
@@ -472,6 +490,7 @@ export function openEmailComposer(options) {
       input.addEventListener('input', () => { model[field][index] = input.value; if (field === 'cc') model.ccTouched = true; input.removeAttribute('aria-invalid'); });
       const remove = button(`${field === 'to' ? 'Retirer le destinataire' : 'Retirer la copie'} ${index + 1}`, () => {
         if (sending) return;
+        closePanelMotion(chip);
         model[field].splice(index, 1); if (field === 'cc') model.ccTouched = true;
         renderRecipients(field); (recipientInputs[field][index] || recipientInputs[field].at(-1) || rows[field].add).focus();
       }, 'close', true);
@@ -508,7 +527,7 @@ export function openEmailComposer(options) {
   const footer = el('footer', 'em-footer');
   const hint = el('span', 'em-footer-hint', 'Envoi depuis votre Outlook');
   const cancel = button('Annuler', close);
-  const send = button('Envoyer', sendMessage, 'send'); send.classList.add('em-primary');
+  const send = button('Envoyer', sendMessage, 'send'); send.classList.add('em-primary','em-send');
   const another = button('Préparer un autre envoi', confirmAnother);
   another.classList.add('em-another'); another.hidden = true;
   footer.append(hint, another, cancel, send); panel.append(head, scroll, status, footer);
@@ -585,8 +604,8 @@ export function openEmailComposer(options) {
     function closePreview() {
       if (previewClosed) return;
       previewClosed = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-      layer.remove(); nested = null; panel.inert = false;
+      if (objectUrl) {const url=objectUrl;releaseAfterMotion(()=>URL.revokeObjectURL(url));}
+      closePanelMotion(viewer); layer.remove(); nested = null; panel.inert = false;
       host.setScope(panel, close); viewPdf.focus(); pollSettings();
     }
     const previewController = { close: closePreview, focus: () => host.setScope(viewer, closePreview), ready: null };
@@ -626,7 +645,7 @@ export function openEmailComposer(options) {
     footer.append(button('Annuler', closeConfirmation), confirm);
     confirmation.append(head, content, footer); layer.append(confirmation); host.root.append(layer);
     function closeConfirmation() {
-      layer.remove(); nested = null; panel.inert = false; host.setScope(panel, close); (another.hidden ? send : another).focus();
+      closePanelMotion(confirmation); layer.remove(); nested = null; panel.inert = false; host.setScope(panel, close); (another.hidden ? send : another).focus();
     }
     nested = { close: closeConfirmation, focus: () => host.setScope(confirmation, closeConfirmation) };
     nested.focus();

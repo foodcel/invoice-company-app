@@ -1,7 +1,7 @@
 {
   "name": "invoice-company-app",
   "private": true,
-  "version": "0.1.19",
+  "version": "0.1.31",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
@@ -14,7 +14,8 @@
     "@tauri-apps/plugin-dialog": "^2.8.0",
     "@tauri-apps/plugin-process": "2.4.0",
     "@tauri-apps/plugin-updater": "2.13.0",
-    "pdf-lib": "1.17.1"
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.3.289"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.0",

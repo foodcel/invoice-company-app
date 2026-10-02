@@ -1,8 +1,9 @@
 import {
   PDFDocument, StandardFonts, rgb,
-  pushGraphicsState, popGraphicsState, rectangle, clip, endPath,
+  pushGraphicsState, popGraphicsState, rectangle, clip, endPath, setWordSpacing,
 } from 'pdf-lib';
-import { paymentTotal, customerPayments } from './payments.js';
+import { paymentRows, paymentTotal, customerPayments } from './payments.js';
+import { previewTaxTotals, numericAmount, calculateTaxTotals, taxIssue, taxLabel, taxRegistration, documentLocation } from './taxes.js';
 import { formatPhone } from './phone.js';
 
 // This is the existing mockup artwork. Only its wood-grain symbol is clipped
@@ -16,7 +17,7 @@ const LEFT = 42;
 const RIGHT = 570;
 const FOOTER_TOP = 738;
 const ITEM_BOTTOM = 715;
-const ITEM_LINE = 14;
+const ITEM_LINE = 13;
 
 const ink = rgb(0.15, 0.19, 0.18);
 const brown = rgb(0.43, 0.31, 0.25);
@@ -115,7 +116,7 @@ function readItems(draft) {
     if (!description) throw new Error(`Description obligatoire à la ligne ${index + 1}.`);
     const quantity = amount(item?.quantity, `Quantité de la ligne ${index + 1}`, { positive: true });
     const price = amount(item?.price, `Prix de la ligne ${index + 1}`);
-    items.push({ description, quantity, price, lineNumber: index + 1 });
+    items.push({ description, quantity, price, lineNumber: index + 1, pageBreakBefore: item.pageBreakBefore === true });
   });
   if (!items.length) throw new Error('Au moins une ligne de travail est requise.');
   return items;
@@ -123,21 +124,12 @@ function readItems(draft) {
 
 // Kept pure so the frontend can compare its preview with the PDF amounts.
 export function calculateTotals(draft) {
-  const items = readItems(draft);
-  const subtotal = roundCents(items.reduce((sum, item) => sum + item.quantity * item.price, 0));
-  const tps = roundCents(subtotal / 100 * 0.05);
-  const tvq = roundCents(subtotal / 100 * 0.09975);
-  const total = subtotal + tps + tvq;
-  customerPayments(draft); // Validate row amounts/dates before using their total.
-  const deposit = roundCents(paymentTotal(draft));
-  return Object.freeze({
-    subtotal: subtotal / 100, tps: tps / 100, tvq: tvq / 100,
-    total: total / 100, deposit: deposit / 100,
-    balance: Math.max(0, total - deposit) / 100,
-  });
+  readItems(draft);
+  customerPayments(draft);
+  return Object.freeze(calculateTaxTotals(draft, paymentTotal(draft)));
 }
 
-const money = (value, language = 'fr') => new Intl.NumberFormat(language === 'en' ? 'en-CA' : 'fr-CA', {
+const money = (value, language = 'fr') => value === null ? (language === 'en' ? 'To confirm' : 'À confirmer') : new Intl.NumberFormat(language === 'en' ? 'en-CA' : 'fr-CA', {
   style: 'currency', currency: 'CAD', minimumFractionDigits: 2,
 }).format(value);
 
@@ -164,13 +156,20 @@ function pdfText(value, font) {
   return output;
 }
 
-function wrapText(value, font, size, width) {
+// Standard-font Tj drawing uses glyph advances without pair kerning.
+function glyphWidth(text, font, size) {
+  return Array.from(text).reduce((sum, char) => sum + font.widthOfTextAtSize(char, size), 0);
+}
+
+function wrapText(value, font, size, width, description = false) {
   const lines = [];
+  const append = (text, justify = false) => lines.push(description ? {text, justify} : text);
+  const measure = text => glyphWidth(text, font, size);
   const splitLong = word => {
     let piece = '';
     const pieces = [];
     for (const char of word) {
-      if (piece && font.widthOfTextAtSize(piece + char, size) > width) {
+      if (piece && measure(piece + char) > width) {
         pieces.push(piece); piece = '';
       }
       piece += char;
@@ -179,23 +178,23 @@ function wrapText(value, font, size, width) {
     return pieces;
   };
   for (const paragraph of pdfText(value, font).split('\n')) {
-    if (!paragraph.trim()) { lines.push(''); continue; }
+    if (!paragraph.trim()) { append(''); continue; }
     const bullet = /^([•‣▪◦*-])\s+/.test(paragraph) ? '  ' : '';
     let line = '';
     for (const word of paragraph.trim().split(/\s+/)) {
       const candidate = line ? `${line} ${word}` : word;
-      if (font.widthOfTextAtSize(candidate, size) <= width) {
+      if (measure(candidate) <= width) {
         line = candidate;
         continue;
       }
-      if (line) { lines.push(line); line = bullet; }
+      if (line) { append(line, true); line = bullet; }
       for (const piece of splitLong(word)) {
         const next = line.trim() ? `${line} ${piece}` : line + piece;
-        if (font.widthOfTextAtSize(next, size) <= width) line = next;
-        else { if (line.trim()) lines.push(line); line = bullet + piece; }
+        if (measure(next) <= width) line = next;
+        else { if (line.trim()) append(line, true); line = bullet + piece; }
       }
     }
-    lines.push(line);
+    append(line);
   }
   return lines;
 }
@@ -207,7 +206,7 @@ function drawText(page, value, x, top, font, size, color = ink) {
 
 function drawRight(page, value, right, top, font, size, color = ink) {
   const text = pdfText(value, font);
-  drawText(page, text, right - font.widthOfTextAtSize(text, size), top, font, size, color);
+  drawText(page, text, right - glyphWidth(text, font, size), top, font, size, color);
 }
 
 function drawRule(page, top, x1 = LEFT, x2 = RIGHT, color = rule, thickness = 0.8) {
@@ -215,13 +214,31 @@ function drawRule(page, top, x1 = LEFT, x2 = RIGHT, color = rule, thickness = 0.
 }
 
 function drawLines(page, lines, x, top, font, size, leading, color = ink) {
-  lines.forEach((line, index) => drawText(page, line, x, top + index * leading, font, size, color));
+  lines.forEach((line, index) => drawText(page, line.text ?? line, x, top + index * leading, font, size, color));
+}
+
+function drawDescriptionLines(page, lines, x, top, font, size, leading, width, color = ink) {
+  lines.forEach((line, index) => {
+    const indent = line.text.match(/^ */)[0];
+    const text = line.text.slice(indent.length);
+    const gaps = (text.match(/ /g) || []).length;
+    const indentWidth = font.widthOfTextAtSize(indent, size);
+    const extra = width - indentWidth - glyphWidth(text, font, size);
+    if (gaps && extra !== 0 && (line.justify || extra < 0)) {
+      // Scope PDF text state so justification cannot affect numeric columns.
+      page.pushOperators(pushGraphicsState(), setWordSpacing(extra / gaps));
+      drawText(page, text, x + indentWidth, top + index * leading, font, size, color);
+      page.pushOperators(popGraphicsState());
+    } else {
+      drawText(page, line.text, x, top + index * leading, font, size, color);
+    }
+  });
 }
 
 function drawLogo(page, image) {
   const x = LEFT + 1;
-  const top = 40;
-  const scale = 0.47;
+  const top = 24;
+  const scale = 0.24;
   const { x: cropX, y: cropY, width, height } = LOGO_CROP;
   page.pushOperators(
     pushGraphicsState(),
@@ -241,12 +258,12 @@ function drawHeader(page, context, first) {
   const { normal, bold, logo, labels, number } = context;
   if (first) {
     drawLogo(page, logo);
-    drawText(page, 'ÉBÉNISTERIE', 112, 53, bold, 17, brown);
-    drawText(page, "DE L'HERMITAGE INC.", 112, 77, bold, 10, brown);
-    drawRight(page, labels.title, RIGHT, 49, bold, 28);
-    if (number !== null) drawRight(page, `${labels.invoiceNumber} ${number}`, RIGHT, 91, normal, 10, muted);
-    drawRule(page, 134, LEFT, RIGHT, brown, 1.7);
-    return 151;
+    drawText(page, 'ÉBÉNISTERIE', 84, 24, bold, 17, brown);
+    drawText(page, "DE L'HERMITAGE INC.", 84, 48, bold, 10, brown);
+    drawRight(page, labels.title, RIGHT, 25, bold, 28);
+    if (number !== null) drawRight(page, `${labels.invoiceNumber} ${number}`, RIGHT, 58, normal, 10, muted);
+    drawRule(page, 76, LEFT, RIGHT, brown, 1.7);
+    return 88;
   }
   drawText(page, "Ébénisterie de l'Hermitage inc.", LEFT, 42, bold, 11, brown);
   drawRight(page, number === null ? `${labels.title} · ${labels.continued.toLowerCase()}` :
@@ -264,28 +281,30 @@ function drawSummary(page, draft, context, top) {
   drawLines(page, projectLines, LEFT, top + 17, bold, 12, 15);
   drawText(page, labels.documentDate, 316, top, bold, 9, brown);
   drawText(page, displayDate(draft.date, true, context.language), 316, top + 18, bold, 11);
-  drawText(page, labels.date.toUpperCase(), 435, top, bold, 8.2, brown);
+  drawText(page, labels.date.toUpperCase(), 435, top, bold, 9, brown);
   drawText(page, displayDate(context.kind === 'facture' ? draft.dueDate : draft.validUntil,
     context.kind !== 'facture', context.language), 435, top + 18, bold, 11);
-  const bottom = top + Math.max(46, 22 + projectLines.length * 15);
+  const bottom = top + Math.max(40, 20 + projectLines.length * 15);
   drawRule(page, bottom);
-  return bottom + 17;
+  return bottom + 12;
 }
 
 function partyContent(draft, context) {
   const { normal, bold, labels } = context;
   const client = wrapText(draft.client, bold, 12, 225);
-  const address = wrapText(draft.address, normal, 10, 225);
+  const address = wrapText(draft.address, normal, 10, 225, true);
   const contact = draft.contact?.trim() ? wrapText(`${labels.phone} ${formatPhone(draft.contact)}`, normal, 10, 225) : [];
   const email = draft.email?.trim() ? wrapText(`${labels.email} ${draft.email}`, normal, 10, 225) : [];
-  const ship = draft.shipTo?.trim() ? wrapText(draft.shipTo, normal, 10, 225) : [];
+  const location=documentLocation(draft,context.language);
+  const ship = location.address.trim() ? wrapText(location.address, normal, 10, 225, true) : [];
   return { client, address, contact, email, ship };
 }
 
 function partyHeight(info) {
-  return Math.max(119, 31 + info.client.length * 15 + 5 +
-    (info.address.length + info.contact.length + info.email.length) * 14 +
-    (info.ship.length ? 27 + info.ship.length * 14 : 0) + 15);
+  const clientHeight = 23 + info.client.length * 15 + 2 +
+    (info.address.length + info.contact.length + info.email.length) * 12 + 10;
+  const companyHeight = info.ship.length ? 94 + info.ship.length * 12 + 8 : 88;
+  return Math.max(88, clientHeight, companyHeight);
 }
 
 function drawParties(page, draft, context, top) {
@@ -298,26 +317,25 @@ function drawParties(page, draft, context, top) {
   for (const x of [leftX, rightX]) {
     page.drawRectangle({ x, y: PAGE_H - top - height, width, height, borderColor: rule, borderWidth: 0.8 });
   }
-  let y = top + 12;
+  let y = top + 8;
   drawText(page, labels.party.toUpperCase(), leftX + 13, y, bold, 9, brown);
-  y += 19;
+  y += 15;
   drawLines(page, info.client, leftX + 13, y, bold, 12, 15);
-  y += info.client.length * 15 + 5;
+  y += info.client.length * 15 + 2;
   for (const lines of [info.address, info.contact, info.email]) {
-    drawLines(page, lines, leftX + 13, y, normal, 10, 14, muted);
-    y += lines.length * 14;
+    if (lines === info.address) drawDescriptionLines(page, lines, leftX + 13, y, normal, 10, 12, 225, muted);
+    else drawLines(page, lines, leftX + 13, y, normal, 10, 12, muted);
+    y += lines.length * 12;
   }
+  drawText(page, labels.issuedBy.toUpperCase(), rightX + 13, top + 8, bold, 9, brown);
+  drawText(page, "Ébénisterie de l'Hermitage inc.", rightX + 13, top + 23, bold, 11);
+  drawLines(page, ['68, chemin des guides', 'Ripon (Qc) J0V 1V0', '(819) 428-7690'], rightX + 13, top + 38, normal, 10, 12, muted);
   if (info.ship.length) {
-    drawRule(page, y + 5, leftX + 13, leftX + width - 13);
-    y += 14;
-    drawText(page, labels.shipTo.toUpperCase(), leftX + 13, y, bold, 9, brown);
-    y += 14;
-    drawLines(page, info.ship, leftX + 13, y, normal, 10, 14, muted);
+    drawRule(page, top + 74, rightX + 13, rightX + width - 13);
+    drawText(page, labels.shipTo.toUpperCase(), rightX + 13, top + 80, bold, 9, brown);
+    drawDescriptionLines(page, info.ship, rightX + 13, top + 94, normal, 10, 12, 225, muted);
   }
-  drawText(page, labels.issuedBy.toUpperCase(), rightX + 13, top + 12, bold, 9, brown);
-  drawText(page, "Ébénisterie de l'Hermitage inc.", rightX + 13, top + 31, bold, 11);
-  drawLines(page, ['68, chemin des guides', 'Ripon (Qc) J0V 1V0', '(819) 428-7690'], rightX + 13, top + 52, normal, 10, 14, muted);
-  return top + height + 18;
+  return top + height + 12;
 }
 
 // Very long names, addresses or project text use a full-width flow instead of
@@ -332,13 +350,13 @@ function drawFlowDetails(doc, draft, context, initialPage, initialTop) {
   };
   const field = (label, value) => {
     if (!String(value ?? '').trim()) return;
-    const lines = wrapText(value, normal, 10.5, RIGHT - LEFT);
+    const lines = wrapText(value, normal, 10.5, RIGHT - LEFT, true);
     if (cursor + 38 > ITEM_BOTTOM) next();
     drawText(page, label.toUpperCase(), LEFT, cursor, bold, 9, brown);
     cursor += 18;
     for (const line of lines) {
       if (cursor + 15 > ITEM_BOTTOM) next();
-      drawText(page, line, LEFT, cursor, normal, 10.5);
+      drawDescriptionLines(page, [line], LEFT, cursor, normal, 10.5, 15, RIGHT - LEFT);
       cursor += 15;
     }
     cursor += 12;
@@ -351,7 +369,7 @@ function drawFlowDetails(doc, draft, context, initialPage, initialTop) {
   field(labels.billingAddress, draft.address);
   field(labels.clientPhone, formatPhone(draft.contact));
   field(labels.clientEmail, draft.email);
-  field(labels.shipTo, draft.shipTo);
+  field(labels.shipTo, documentLocation(draft,context.language).address);
   field(labels.issuedBy, "Ébénisterie de l'Hermitage inc.\n68, chemin des guides\nRipon (Qc) J0V 1V0\n(819) 428-7690");
   return { page, cursor };
 }
@@ -362,24 +380,24 @@ function drawTableHeader(page, context, top) {
   drawText(page, labels.quantity, 341, top + 5, bold, 9, brown);
   drawRight(page, labels.unitPrice, 466, top + 5, bold, 9, brown);
   drawRight(page, labels.amount, RIGHT, top + 5, bold, 9, brown);
-  drawRule(page, top + 26, LEFT, RIGHT, brown, 1.3);
-  return top + 27;
+  drawRule(page, top + 22, LEFT, RIGHT, brown, 1.3);
+  return top + 23;
 }
 
 function drawItem(page, context, item, lines, top, showNumbers, continuationLine = null) {
   const { normal, bold, labels, language } = context;
   const cueHeight = continuationLine === null ? 0 : 17;
-  const height = Math.max(30, lines.length * ITEM_LINE + 16 + cueHeight);
+  const height = Math.max(26, lines.length * ITEM_LINE + 13 + cueHeight);
   if (continuationLine !== null) {
     drawText(page, `${labels.line} ${continuationLine} · ${labels.continued}`, LEFT + 6, top + 8, bold, 8.5, brown);
   }
-  drawLines(page, lines, LEFT + 6, top + 8 + cueHeight, normal, 10.5, ITEM_LINE);
+  drawDescriptionLines(page, lines, LEFT + 6, top + 8 + cueHeight, normal, 10.5, ITEM_LINE, 276);
   if (showNumbers) {
     const quantity = new Intl.NumberFormat(language === 'en' ? 'en-CA' : 'fr-CA', { maximumFractionDigits: 6 }).format(item.quantity);
-    const qtyWidth = normal.widthOfTextAtSize(pdfText(quantity, normal), 10);
+    const qtyWidth = glyphWidth(pdfText(quantity, normal), normal, 10);
     drawText(page, quantity, 355 - qtyWidth / 2, top + 8, normal, 10);
     drawRight(page, money(item.price, language), 466, top + 8, normal, 10);
-    drawRight(page, money(Math.round((item.quantity * item.price + Number.EPSILON) * 100) / 100, language), RIGHT, top + 8, normal, 10);
+    drawRight(page, money(item.chargeCents / 100, language), RIGHT, top + 8, normal, 10);
   }
   drawRule(page, top + height, LEFT, RIGHT, rule, 0.6);
   return top + height;
@@ -390,99 +408,246 @@ function pageReference(label, first, last, language) {
   return `${label} : ${range}.`;
 }
 
-// Keep the recap together. When its supporting details exceed one Letter page,
-// flow those details at full width and reference them from the final panels.
-function drawTimelineClosing(doc, initialPage, initialCursor, draft, context, totals) {
-  const { normal, bold, labels, language } = context;
-  const gray = rgb(.42,.45,.44), border = rgb(.83,.85,.84);
-  const light = rgb(.965,.97,.965), white = rgb(1,1,1);
-  let page = initialPage, cursor = initialCursor;
-  const next = () => { page = doc.addPage([PAGE_W,PAGE_H]); cursor = drawHeader(page,context,false); };
-  const box = (x,top,w,h,r=7,color=white) => page.drawSvgPath(`M ${r} 0 H ${w-r} Q ${w} 0 ${w} ${r} V ${h-r} Q ${w} ${h} ${w-r} ${h} H ${r} Q 0 ${h} 0 ${h-r} V ${r} Q 0 0 ${r} 0 Z`,{x,y:PAGE_H-top,color,borderColor:border,borderWidth:.7});
-  const text = (s,x,t,size=10,font=normal,color=ink) => drawText(page,s,x,t,font,size,color);
-  const right = (s,x,t,size=10,font=normal,width=120,color=ink) => {
-    const fitted = Math.min(size, width / font.widthOfTextAtSize(pdfText(s,font),1));
-    drawRight(page,s,x,t,font,fitted,color);
-  };
-  const line = (x1,x2,t) => drawRule(page,t,x1,x2,border,.6);
+// The same measured geometry drives page allocation and editor admission.
+function identityHeight(draft, context) {
+  const projectLines = String(draft.project || '').trim() ? wrapText(draft.project, context.bold, 12, 246).length : 0;
+  return 88 + Math.max(40, 20 + projectLines * 15) + 12 + partyHeight(partyContent(draft, context)) + 12 + 23;
+}
+
+function closingHeight(notes, payments, paymentPointer = false) {
+  const left = 28 + (notes.length ? 18 + notes.length * 14 + 18 : 0)
+    + (payments.length ? 18 + payments.length * 24 : 0) + (paymentPointer ? 28 : 0);
+  return Math.max(payments.length ? 164 : 125, left);
+}
+
+function measureLayout(draft, context) {
+  let tableTop = identityHeight(draft, context);
+  // Unbounded legacy identity fields are preserved on detail pages. Work pages
+  // repeat compact references to that identity rather than clipping its text.
+  const identityOverflow = tableTop + 43 + 12 + 164 > 724;
+  if (identityOverflow) tableTop = 88 + 52 + 76 + 23;
   const allPayments = customerPayments(draft);
-  const originalNotes = String(draft.notes || '').trim() ? wrapText(draft.notes,normal,10,219) : [];
-  let notes = originalNotes, payments = allPayments, paymentPointer = '';
-  const leftHeight = () => 28 + (notes.length ? 18 + notes.length*14 + 18 : 0)
-    + (payments.length ? 18 + payments.length*24 : 0) + (paymentPointer ? 28 : 0);
-  // 624pt leaves space below the 82pt continued header and above the tax footer.
-  if (leftHeight() > 624) {
-    // Oversized supporting details flow onto readable full-width pages.
-    // The final two-panel recap references them and keeps the last payments.
-    if (cursor + 82 > 715) next();
-    else cursor += 22;
-    let notesFirst = 0, notesLast = 0, paymentsFirst = 0, paymentsLast = 0;
-    if (String(draft.notes || '').trim()) {
-      const fullLines = wrapText(draft.notes,normal,10.5,500);
-      notesFirst = doc.getPageCount();
-      text(labels.note,LEFT+14,cursor+8,9,bold,gray); cursor += 31;
-      for (const s of fullLines) {
-        if (cursor+14 > 715) { next(); text(`${labels.note} · ${labels.continued}`,LEFT+14,cursor+8,9,bold,gray); cursor += 31; }
-        text(s,LEFT+14,cursor,10.5); cursor += 15;
-      }
-      notesLast = doc.getPageCount(); cursor += 25;
-    }
-    const previous = allPayments.slice(0,Math.max(0,allPayments.length-3));
-    if (previous.length) {
-      if(cursor+60 > 715) next();
-      paymentsFirst = doc.getPageCount();
-      text(labels.payments,LEFT+14,cursor+8,9,bold,gray); cursor += 35;
-      let lastDot = null;
-      for (const payment of previous) {
-        if (cursor+24 > 715) { next(); text(`${labels.payments} · ${labels.continued}`,LEFT+14,cursor+8,9,bold,gray); cursor += 35; lastDot = null; }
-        const dotY = PAGE_H-cursor-5;
-        if(lastDot !== null) page.drawLine({start:{x:LEFT+19,y:lastDot},end:{x:LEFT+19,y:dotY},thickness:1,color:border});
-        page.drawCircle({x:LEFT+19,y:dotY,size:3,color:gray,borderColor:white,borderWidth:1});
-        text(payment.date ? displayDate(payment.date,true,language) : labels.paymentNoDate,LEFT+31,cursor,10,normal,gray);
-        right(money(payment.amount,language),RIGHT-14,cursor,10,bold,300);
-        lastDot = dotY; cursor += 24;
-      }
-      paymentsLast = doc.getPageCount(); cursor += 20;
-    }
-    notes = notesFirst ? [pageReference(labels.noteDetails, notesFirst, notesLast, language)] : [];
-    payments = allPayments.slice(-3);
-    paymentPointer = paymentsFirst ? pageReference(labels.previousPayments, paymentsFirst, paymentsLast, language) : '';
+  const originalNotes = String(draft.notes || '').trim() ? wrapText(draft.notes, context.normal, 10, 219, true) : [];
+  const maximumClosing = 724 - tableTop - 43 - 12;
+  const supportOverflow = closingHeight(originalNotes, allPayments) > maximumClosing;
+  // Reference width has room for any realistic page count. Actual references
+  // are wrapped and checked again before the final work page is rendered.
+  const notes = supportOverflow && originalNotes.length ? [{text:context.labels.noteDetails + ' : pages 000000-000000.', justify:false}] : originalNotes;
+  const payments = supportOverflow ? allPayments.slice(-3) : allPayments;
+  const previousPayments = supportOverflow ? allPayments.slice(0, -3) : [];
+  const height = closingHeight(notes, payments, previousPayments.length > 0);
+  const finalCapacity = Math.max(0, 724 - height - 12 - tableTop);
+  return {tableTop, identityOverflow, originalNotes, allPayments, notes, payments, previousPayments, supportOverflow, height,
+    regularCapacity:ITEM_BOTTOM - tableTop, finalCapacity};
+}
+
+function drawWorkIdentity(page, draft, context, layout, identityReference) {
+  let cursor = drawHeader(page, context, true);
+  if (!layout.identityOverflow) {
+    cursor = drawSummary(page, draft, context, cursor);
+    cursor = drawParties(page, draft, context, cursor);
+  } else {
+    // Complete original values are on the referenced pages; do not truncate.
+    drawText(page, context.labels.project, LEFT, cursor, context.bold, 9, brown);
+    drawText(page, identityReference, LEFT, cursor + 17, context.bold, 12);
+    drawText(page, context.labels.documentDate, 316, cursor, context.bold, 9, brown);
+    drawText(page, displayDate(draft.date, true, context.language), 316, cursor + 18, context.bold, 11);
+    drawText(page, context.labels.date.toUpperCase(), 435, cursor, context.bold, 9, brown);
+    drawText(page, displayDate(context.kind === 'facture' ? draft.dueDate : draft.validUntil,
+      context.kind !== 'facture', context.language), 435, cursor + 18, context.bold, 11);
+    cursor += 52;
+    drawText(page, context.labels.party.toUpperCase(), LEFT, cursor, context.bold, 9, brown);
+    drawText(page, identityReference, LEFT, cursor + 17, context.bold, 12);
+    drawText(page, context.labels.issuedBy.toUpperCase(), 311, cursor, context.bold, 9, brown);
+    drawText(page, "Ébénisterie de l'Hermitage inc.", 311, cursor + 17, context.bold, 11);
+    drawLines(page, ['68, chemin des guides', 'Ripon (Qc) J0V 1V0', '(819) 428-7690'], 311, cursor + 34, context.normal, 10, 12, muted);
+    cursor += 76;
   }
-  const hasPayments = payments.length > 0;
-  const height = Math.max(hasPayments ? 202 : 163,leftHeight());
-  let top = 724-height;
-  if (cursor > top-12) { next(); top = cursor+12; }
-  if (notes.length || hasPayments) box(42,top,247,height);
-  box(301,top,269,height);
-  let leftTop = top+16;
-  if(notes.length) {
+  return drawTableHeader(page, context, cursor);
+}
+
+function rowHeight(lines, continued = false) {
+  return Math.max(26, lines.length * ITEM_LINE + 13 + (continued ? 17 : 0));
+}
+
+function planWorkPages(items, context, layout) {
+  if (layout.finalCapacity < 26 || layout.regularCapacity < 43) throw new Error('Espace insuffisant pour le travail et les totaux.');
+  const chunks = [];
+  let runningAmount = 0, previousCents = 0;
+  for (let item of items) {
+    // Cumulative cent rounding reconciles page sums with the unchanged overall
+    // calculator, even for fractional quantities/unit prices with half cents.
+    runningAmount += item.quantity * item.price;
+    const cumulativeCents = roundCents(runningAmount);
+    item = {...item, chargeCents:cumulativeCents - previousCents};
+    previousCents = cumulativeCents;
+    const lines = wrapText(item.description, context.normal, 10.5, 276, true);
+    let at = 0;
+    while (at < lines.length) {
+      const continued = at > 0;
+      const capacity = Math.floor((layout.regularCapacity - 13 - (continued ? 17 : 0)) / ITEM_LINE);
+      const chunk = lines.slice(at, at + capacity);
+      chunks.push({item, lines:chunk, continued, showNumbers:!continued,
+        pageBreakBefore:at === 0 && item.pageBreakBefore, height:rowHeight(chunk, continued)});
+      at += chunk.length;
+    }
+  }
+  // Legacy rows larger than the admitted final-page capacity can continue,
+  // but every word and the charge occur exactly once. New entry uses the API
+  // below and explicit manual continuation instead of this compatibility path.
+  const last = chunks.at(-1);
+  if (last.height > layout.finalCapacity) {
+    const count = Math.floor((layout.finalCapacity - 30) / ITEM_LINE);
+    if (count < 1) throw new Error('Espace insuffisant pour une description et les totaux.');
+    const split = last.lines.length - count;
+    const ending = {...last, lines:last.lines.slice(split), continued:true, showNumbers:false, pageBreakBefore:true};
+    last.lines = last.lines.slice(0, split); last.height = rowHeight(last.lines, last.continued);
+    ending.height = rowHeight(ending.lines, true); chunks.push(ending);
+  }
+  let finalStart = chunks.length - 1, finalHeight = chunks[finalStart].height;
+  while (finalStart > 0 && !chunks[finalStart].pageBreakBefore && finalHeight + chunks[finalStart - 1].height <= layout.finalCapacity) {
+    finalStart--; finalHeight += chunks[finalStart].height;
+  }
+  const pages = []; let rows = [], height = 0;
+  for (const chunk of chunks.slice(0, finalStart)) {
+    if (rows.length && (chunk.pageBreakBefore || height + chunk.height > layout.regularCapacity)) {
+      pages.push(rows); rows = []; height = 0;
+    }
+    rows.push(chunk); height += chunk.height;
+  }
+  const finalRows = chunks.slice(finalStart);
+  // A single page is possible only if the entire ending group fits its recap.
+  if (rows.length && !finalRows[0].pageBreakBefore && height + finalHeight <= layout.finalCapacity) pages.push([...rows, ...finalRows]);
+  else {if (rows.length) pages.push(rows); pages.push(finalRows);}
+  return pages;
+}
+
+// Supporting data precedes the final work page, which always owns the recap.
+function drawSupportingDetails(doc, draft, context, layout) {
+  const {normal, bold, labels, language} = context;
+  let page, cursor = ITEM_BOTTOM;
+  const next = () => {page = doc.addPage([PAGE_W, PAGE_H]); cursor = drawHeader(page, context, false);};
+  let notesFirst = 0, notesLast = 0, paymentsFirst = 0, paymentsLast = 0;
+  if (layout.originalNotes.length) {
+    const lines = wrapText(draft.notes, normal, 10.5, 500, true);
+    next(); notesFirst = doc.getPageCount();
+    drawText(page, labels.note, 56, cursor + 8, bold, 9, muted); cursor += 31;
+    for (const line of lines) {
+      if (cursor + 15 > ITEM_BOTTOM) {next(); drawText(page, `${labels.note} · ${labels.continued}`, 56, cursor + 8, bold, 9, muted); cursor += 31;}
+      drawDescriptionLines(page, [line], 56, cursor, normal, 10.5, 15, 500, muted); cursor += 15;
+    }
+    notesLast = doc.getPageCount(); cursor += 25;
+  }
+  if (layout.previousPayments.length) {
+    if (cursor + 60 > ITEM_BOTTOM) next();
+    paymentsFirst = doc.getPageCount();
+    drawText(page, labels.payments, 56, cursor + 8, bold, 9, muted); cursor += 35;
+    let lastDot = null;
+    for (const payment of layout.previousPayments) {
+      if (cursor + 24 > ITEM_BOTTOM) {next(); drawText(page, `${labels.payments} · ${labels.continued}`, 56, cursor + 8, bold, 9, muted); cursor += 35; lastDot = null;}
+      const dotY = PAGE_H - cursor - 5;
+      if (lastDot !== null) page.drawLine({start:{x:61,y:lastDot},end:{x:61,y:dotY},thickness:1,color:rule});
+      page.drawCircle({x:61,y:dotY,size:3,color:muted});
+      drawText(page, payment.date ? displayDate(payment.date, true, language) : labels.paymentNoDate, 73, cursor, normal, 10, muted);
+      drawRight(page, money(payment.amount, language), RIGHT - 14, cursor, bold, 10);
+      lastDot = dotY; cursor += 24;
+    }
+    paymentsLast = doc.getPageCount();
+  }
+  return {
+    notes:notesFirst ? wrapText(pageReference(labels.noteDetails, notesFirst, notesLast, language), normal, 10, 219, true) : [],
+    paymentPointer:paymentsFirst ? pageReference(labels.previousPayments, paymentsFirst, paymentsLast, language) : '',
+  };
+}
+
+function drawTimelineClosing(page, cursor, context, totals, layout, references) {
+  const {normal, bold, labels, language} = context;
+  const gray = rgb(.42,.45,.44), border = rgb(.83,.85,.84), white = rgb(1,1,1);
+  const notes = layout.supportOverflow ? references.notes : layout.notes;
+  const payments = layout.payments, paymentPointer = references.paymentPointer || '';
+  const height = closingHeight(notes, payments, !!paymentPointer);
+  const top = 724 - height;
+  if (cursor + 12 > top) throw new Error('Le plan PDF dépasse la zone réservée aux totaux.');
+  const box = (x,w) => page.drawSvgPath(`M 7 0 H ${w-7} Q ${w} 0 ${w} 7 V ${height-7} Q ${w} ${height} ${w-7} ${height} H 7 Q 0 ${height} 0 ${height-7} V 7 Q 0 0 7 0 Z`, {x,y:PAGE_H-top,color:white,borderColor:border,borderWidth:.7});
+  const text = (s,x,t,size=10,font=normal,color=ink) => drawText(page,s,x,t,font,size,color);
+  const right = (s,x,t,size=10,font=normal,width=120) => {
+    const fitted = Math.min(size, width / glyphWidth(pdfText(s,font),font,1));
+    drawRight(page,s,x,t,font,fitted);
+  };
+  const line = t => drawRule(page,t,315,556,border,.6);
+  if (notes.length || payments.length) box(42,247);
+  box(301,269);
+  let leftTop = top + 16;
+  if (notes.length) {
     text(labels.note,56,leftTop,8.5,bold,gray); leftTop += 19;
-    notes.forEach(s=>{ text(s,56,leftTop,10,normal,gray); leftTop += 14; });
-    if(hasPayments) { line(56,275,leftTop+9); leftTop += 23; }
+    drawDescriptionLines(page,notes,56,leftTop,normal,10,14,219,gray); leftTop += notes.length*14;
+    if (payments.length) {drawRule(page,leftTop+9,56,275,border,.6); leftTop += 23;}
   }
-  if(hasPayments) {
+  if (payments.length) {
     text(labels.payments,56,leftTop,8.5,bold,gray); leftTop += 22;
-    if(paymentPointer) { text(paymentPointer,56,leftTop,9,normal,gray); leftTop += 26; }
-    const firstDot=PAGE_H-leftTop-5, lastDot=firstDot-(payments.length-1)*24;
-    page.drawLine({start:{x:61,y:firstDot},end:{x:61,y:lastDot},thickness:1,color:border});
-    payments.forEach((payment,i)=>{
-      const t=leftTop+i*24;
+    if (paymentPointer) {text(paymentPointer,56,leftTop,9,normal,gray); leftTop += 26;}
+    const firstDot = PAGE_H-leftTop-5;
+    page.drawLine({start:{x:61,y:firstDot},end:{x:61,y:firstDot-(payments.length-1)*24},thickness:1,color:border});
+    payments.forEach((payment,i) => {
+      const t = leftTop+i*24;
       page.drawCircle({x:61,y:PAGE_H-t-5,size:3,color:gray,borderColor:white,borderWidth:1});
       text(payment.date ? displayDate(payment.date,true,language) : labels.paymentNoDate,73,t,10,normal,gray);
       right(money(payment.amount,language),275,t,10,bold,112);
     });
   }
-  const rows = [[labels.subtotal,totals.subtotal],[labels.gst,totals.tps],[labels.qst,totals.tvq]];
-  rows.forEach(([label,amount],i)=>{text(label,315,top+17+i*23,10,normal,gray);right(money(amount,language),556,top+17+i*23);});
-  line(315,556,top+90);
-  text(labels.total,315,top+102,11.5,bold);right(money(totals.total,language),556,top+102,12,bold,109);
-  if(totals.deposit>0) {
-    text(labels.deposit,315,top+134,10,normal,gray);right(money(totals.deposit,language),556,top+134);
-    box(314,top+height-51,243,37,5,light);
-    text(labels.balance,326,top+height-39,10.5,bold);
-    const balanceWidth = 545 - 326 - bold.widthOfTextAtSize(labels.balance,10.5) - 12;
-    right(money(totals.balance,language),545,top+height-42,16,bold,balanceWidth);
+  const rows = [[labels.subtotal,totals.subtotal],...totals.lines.map(tax=>[taxLabel(tax.code,language),tax.amount])];
+  if (!totals.tax.province) rows.push([language === 'en' ? 'Taxes to confirm' : 'Taxes à confirmer',null]);
+  rows.forEach(([label,amount],i)=>{text(label,315,top+17+i*19,10,normal,gray);right(money(amount,language),556,top+17+i*19);});
+  line(top+73);
+  text(labels.total,315,top+85,11.5,bold);right(money(totals.total,language),556,top+85,12,bold,109);
+  if (totals.deposit>0) {
+    text(labels.deposit,315,top+110,10,normal,gray);right(money(totals.deposit,language),556,top+110);
+    line(top+height-40);
+    text(labels.balance,315,top+height-28,11.5,bold);right(money(totals.balance,language),556,top+height-28,12,bold,109);
   }
+}
+
+async function descriptionMeasurement(draft) {
+  const doc = await PDFDocument.create();
+  const [normal,bold] = await Promise.all([doc.embedFont(StandardFonts.Helvetica),doc.embedFont(StandardFonts.HelveticaBold)]);
+  // Admission must be safe for either output language and for incomplete
+  // editable drafts. The preview uses the same payment sanitization.
+  const capacities = ['fr','en'].map(language => {
+    const kind = draft?.kind === 'facture' ? 'facture' : 'soumission';
+    const labels = {...LABELS[language].common,...LABELS[language][kind]};
+    const safeDraft = previewDraft(draft || {}, language);
+    const layout = measureLayout(safeDraft,{normal,bold,labels,language,kind});
+    return layout.finalCapacity;
+  });
+  const maxHeight = Math.max(0,Math.min(...capacities)-13);
+  return {normal,maxHeight,maxLines:Math.max(0,Math.floor(maxHeight/ITEM_LINE))};
+}
+
+/** Actual 10.5pt/276pt wrapping capacity for one row plus the final recap.
+ * maxHeight is the description's line-box budget in points (excludes padding).
+ * Both languages are reserved; no PDF, invoice number, or draft is written.
+ */
+export async function measureDescriptionCapacity(draft) {
+  const {maxLines,maxHeight} = await descriptionMeasurement(draft);
+  return {maxLines,maxHeight};
+}
+
+/** Empty text fits; callers separately validate a required description. */
+export async function descriptionFitsPage(draft,text) {
+  const {normal,maxLines} = await descriptionMeasurement(draft);
+  return wrapText(text,normal,10.5,276,true).length <= maxLines;
+}
+
+function previewDraft(draft, language) {
+  return {...draft,
+    project:draft.project?.trim() || (language === 'en' ? 'Project name' : 'Nom du projet'),
+    client:draft.client?.trim() || (language === 'en' ? 'Client name' : 'Nom du client'),
+    address:draft.address?.trim() || (language === 'en' ? 'Billing address' : 'Adresse de facturation'),
+    payments:paymentRows(draft).filter(row=>numericAmount(row.amount)>0 && numericAmount(row.amount)<=1e9).map(row=>{
+      let date=row.date || '';try {if(date)displayDate(date);} catch {date='';}
+      return {...row,amount:String(numericAmount(row.amount)),date};
+    }),
+  };
 }
 
 function drawFooters(doc, context) {
@@ -490,28 +655,41 @@ function drawFooters(doc, context) {
   const count = doc.getPageCount();
   doc.getPages().forEach((page, index) => {
     drawRule(page, FOOTER_TOP);
-    drawText(page, `${labels.gstId} 848045563 RT0001`, LEFT, 750, normal, 8.5, muted);
-    drawText(page, `${labels.qstId} 1212260726 TQ0001`, 231, 750, normal, 8.5, muted);
+    const registrations = taxRegistration(context.taxProvince,context.language);
+    if (registrations.length < 2) registrations.push(taxRegistration('QC',context.language)[1]);
+    registrations.forEach((label,i)=>drawText(page,label,i===0?LEFT:231,750,normal,8.5,muted));
     drawRight(page, `${index + 1} / ${count}`, RIGHT, 750, normal, 8.5, muted);
   });
 }
 
 /** Render the supplied draft as-is; the caller is responsible for the selected customer text. */
-export async function createPdf(draft, { invoiceNumber = null, language = 'fr' } = {}) {
+export async function createPdf(draft, { invoiceNumber = null, language = 'fr', preview = false } = {}) {
   if (language !== 'fr' && language !== 'en') throw new Error('Langue PDF non prise en charge.');
   if (!draft || (draft.kind !== 'soumission' && draft.kind !== 'facture')) throw new Error('Type de document invalide.');
   const kind = draft.kind;
-  const labels = { ...LABELS[language].common, ...LABELS[language][kind] };
-  const number = kind === 'facture' ? Number(invoiceNumber) : null;
-  if (kind === 'facture' && (!Number.isSafeInteger(number) || number <= 0 || invoiceNumber === null || invoiceNumber === '')) {
+  const labels = { ...LABELS[language].common, ...LABELS[language][kind], shipTo:documentLocation(draft,language).label };
+  const number = kind === 'facture' && Number(invoiceNumber) > 0 ? Number(invoiceNumber) : null;
+  if (!preview && kind === 'facture' && (!Number.isSafeInteger(number) || number <= 0 || invoiceNumber === null || invoiceNumber === '')) {
     throw new Error('Numéro de facture valide requis pour le PDF.');
   }
-  requiredText(draft.client, 'Nom du client');
-  requiredText(draft.address, 'Adresse de facturation');
+  let items, totals;
+  if (preview) {
+    totals = previewTaxTotals(draft, paymentTotal(draft));
+    const original = draft;
+    draft = previewDraft(draft, language);
+    items = (original.items || []).map((item,index) => ({description:item.description?.trim() || '—', quantity:numericAmount(item.quantity),price:numericAmount(item.price),lineNumber:index+1,pageBreakBefore:item.pageBreakBefore === true}))
+      .filter((item,index) => original.items[index].description?.trim() || String(original.items[index].price || '').trim());
+    if (!items.length) items = [{description:language === 'en' ? 'No items added' : 'Aucun article ajouté',quantity:0,price:0,lineNumber:1}];
+  } else {
+    requiredText(draft.project, 'Nom du projet');
+    requiredText(draft.client, 'Nom du client');
+    requiredText(draft.address, 'Adresse de facturation');
+    items = readItems(draft);
+    const taxError = taxIssue(draft); if (taxError) throw new Error(taxError);
+    totals = calculateTotals(draft);
+  }
   displayDate(draft.date, true, language);
   displayDate(kind === 'facture' ? draft.dueDate : draft.validUntil, kind !== 'facture', language);
-  const items = readItems(draft);
-  const totals = calculateTotals(draft);
   const doc = await PDFDocument.create();
   doc.setTitle(`${labels.title}${number === null ? '' : ` ${number}`}`);
   doc.setAuthor("Ébénisterie de l'Hermitage inc.");
@@ -523,45 +701,24 @@ export async function createPdf(draft, { invoiceNumber = null, language = 'fr' }
     doc.embedFont(StandardFonts.HelveticaBold),
     doc.embedPng(LOGO_PNG_BASE64),
   ]);
-  const context = { normal, bold, logo, labels, language, kind, number };
-  let page = doc.addPage([PAGE_W, PAGE_H]);
-  let cursor = drawHeader(page, context, true);
-  const projectLines = draft.project?.trim() ? wrapText(draft.project, bold, 12, 246).length : 0;
-  const detailHeight = Math.max(46, 22 + projectLines * 15) + 17 +
-    partyHeight(partyContent(draft, context)) + 18;
-  if (cursor + detailHeight > ITEM_BOTTOM - 55) {
-    ({ page, cursor } = drawFlowDetails(doc, draft, context, page, cursor));
-  } else {
-    cursor = drawSummary(page, draft, context, cursor);
-    cursor = drawParties(page, draft, context, cursor);
+  const context = { normal, bold, logo, labels, language, kind, number, taxProvince:totals.tax.province };
+  const layout = measureLayout(draft, context);
+  const workPages = planWorkPages(items, context, layout);
+  let identityReference = '';
+  if (layout.identityOverflow) {
+    const page = doc.addPage([PAGE_W, PAGE_H]);
+    drawFlowDetails(doc, draft, context, page, drawHeader(page, context, true));
+    identityReference = pageReference(labels.project,1,doc.getPageCount(),language);
   }
-  if (cursor > ITEM_BOTTOM - 55) {
-    page = doc.addPage([PAGE_W, PAGE_H]);
-    cursor = drawHeader(page, context, false);
-  }
-  cursor = drawTableHeader(page, context, cursor);
-  const nextPage = (table = true) => {
-    page = doc.addPage([PAGE_W, PAGE_H]);
-    cursor = drawHeader(page, context, false);
-    if (table) cursor = drawTableHeader(page, context, cursor);
-  };
-  for (const item of items) {
-    const lines = wrapText(item.description, normal, 10.5, 276);
-    let at = 0;
-    while (at < lines.length) {
-      const continuationLine = at > 0 ? item.lineNumber : null;
-      const capacity = Math.floor((ITEM_BOTTOM - cursor - 16 - (continuationLine === null ? 0 : 17)) / ITEM_LINE);
-      if (capacity < 1) { nextPage(); continue; }
-      let count = Math.min(capacity, lines.length - at);
-      const remaining = lines.length - at - count;
-      if (remaining > 0 && remaining < 3 && count > 3) count -= 3 - remaining;
-      const chunk = lines.slice(at, at + count);
-      cursor = drawItem(page, context, item, chunk, cursor, at === 0, continuationLine);
-      at += chunk.length;
-      if (at < lines.length) nextPage();
-    }
-  }
-  drawTimelineClosing(doc, page, cursor, draft, context, totals);
+  let references = {notes:[],paymentPointer:''};
+  workPages.forEach((rows,index) => {
+    const final = index === workPages.length - 1;
+    if (final && layout.supportOverflow) references = drawSupportingDetails(doc,draft,context,layout);
+    const page = doc.addPage([PAGE_W,PAGE_H]);
+    let cursor = drawWorkIdentity(page,draft,context,layout,identityReference);
+    for (const row of rows) cursor = drawItem(page,context,row.item,row.lines,cursor,row.showNumbers,row.continued ? row.item.lineNumber : null);
+    if (final) drawTimelineClosing(page,cursor,context,totals,layout,references);
+  });
   drawFooters(doc, context);
   return new Uint8Array(await doc.save());
 }

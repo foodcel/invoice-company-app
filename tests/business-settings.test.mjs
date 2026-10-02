@@ -17,6 +17,7 @@ function settings(provider = 'chatgpt', overrides = {}) {
 function dialog(aiSettings, overrides = {}) {
   const context = { settingsOpen: true, settingsBusy: false, settingsError: '', settingsSuccess: '', aiSettings, esc: s => String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'), ...overrides };
   vm.createContext(context);
+  vm.runInContext(functionSource('settingsHeader', '    function preferencesDialog('), context);
   vm.runInContext(functionSource('aiSettingsDialog', '    function invoiceNumberControl('), context);
   return context.aiSettingsDialog();
 }
@@ -27,7 +28,7 @@ function controller(aiSettings = settings()) {
   const field = { value: '', focus() {} };
   const context = {
     settingsOpen: false, settingsBusy: false, settingsError: '', settingsSuccess: '', aiSettings,
-    state: {}, busy: false, mailOpen: false, voiceSession: null, voiceRetryBusy: false, lineAssist: null,
+    state: {}, busy: false, rowMotionPending:false, mailOpen: false, voiceSession: null, voiceRetryBusy: false, lineAssist: null,
     renders: 0, confirm: () => true, errorText: error => error.message || String(error),
     render: () => context.renders++, notice: message => notices.push(message),
     runCommand: async (name, args) => { calls.push({ name, args }); return await context.respond(name, args); },
@@ -63,6 +64,8 @@ test('ChatGPT settings expose sign-in without any credential field or unsupporte
   const html = dialog(settings());
   assert.match(html, /value="chatgpt" checked/);
   assert.match(html, /abonnement Pro \/ personnel/);
+  assert.match(html, /<strong>ChatGPT Sub<\/strong>/);
+  assert.match(html, /<strong>ChatGPT Business<\/strong>/);
   assert.match(html, /data-start-chatgpt-login[^>]*>Se connecter à ChatGPT<\/button>/);
   assert.doesNotMatch(html, /ai-key|type="password"|data-save-ai-key|data-remove-ai-key|data-test-ai|data-disconnect-chatgpt|data-cancel-chatgpt-login|data-refresh-ai-settings/);
   assert.doesNotMatch(html, /value="(?:openai|zai|claude)"|<a\b|clé d’API|OpenAI API/);

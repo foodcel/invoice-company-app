@@ -1,3 +1,5 @@
+import { noteRows, notesMirror, noteIssues, setNoteRows } from './client-notes.js';
+
 const editableFields = ['project', 'client', 'address', 'shipTo', 'contact', 'email', 'date', 'validUntil', 'dueDate', 'notes'];
 const dateFields = new Set(['date', 'validUntil', 'dueDate']);
 const validDate = value => {
@@ -10,6 +12,8 @@ const validNumber = value => /^(?:\d+(?:[.,]\d*)?|[.,]\d+)$/.test(value) && Numb
 
 export function createVoiceSession(draft) {
   const eligible = new Set(editableFields.filter(key => !String(draft[key] ?? '').trim()));
+  if (notesMirror(noteRows(draft)).trim()) eligible.delete('notes');
+  else eligible.add('notes');
   const today = new Date();
   const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   if (draft.date === localToday && !String(draft.project || '').trim() && !String(draft.client || '').trim()) eligible.add('date');
@@ -35,7 +39,12 @@ export function applyVoiceUpdate(draft, update, session) {
     if (typeof proposed !== 'string') continue;
     const value = proposed.trim();
     if (!value || value.length > 5000 || (dateFields.has(key) && !validDate(value))) continue;
-    if (draft[key] !== value) { draft[key] = value; changed = true; }
+    if (key === 'notes' && noteIssues({ noteEntries: [value], notes: value }).length) continue;
+    if (draft[key] !== value) {
+      if (key === 'notes') setNoteRows(draft, [value]);
+      else draft[key] = value;
+      changed = true;
+    }
   }
   if (Array.isArray(update.items)) {
     for (const [index, item] of update.items.slice(0, 30).entries()) {
