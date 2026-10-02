@@ -111,6 +111,7 @@
     let lastDescriptionKey = null;
     let descriptionValidationRevision = 0;
     let writingSequence = 0;
+    let documentCorrectionRunning = false;
     function writingIds() {
       if (!state) return {items:[],notes:[]};
       let ids = writingIdentities.get(state.id);
@@ -124,20 +125,28 @@
     function writingFields() {
       if (!state) return [];
       const ids=writingIds();
-      return [...state.items.map((item,index)=>({key:ids.items[index],text:item.description})),
+      return [...['project','client','address','shipTo'].map(field=>({key:`field:${field}`,text:String(state[field]||''),automatic:false})),
+        ...state.items.map((item,index)=>({key:ids.items[index],text:item.description})),
         ...noteRows(state).map((text,index)=>({key:ids.notes[index],text}))];
     }
     function writingTarget(key) {
+      if(key.startsWith('field:')){const field=key.slice(6);return {field,element:document.querySelector(`[data-field="${field}"]`)};}
       const ids=writingIds(),item=ids.items.indexOf(key),note=ids.notes.indexOf(key);
       return item>=0 ? {item,element:document.querySelector(`[data-item="${item}"][data-key="description"]`)}
         : note>=0 ? {note,element:document.querySelector(`[data-note="${note}"]`)} : null;
     }
     const automatic = createAutomaticCorrections({
       getDocumentId:()=>state?.id, getFields:writingFields,
-      proofread:source=>invoke('ai_proofread_text',{source}),
+      proofread:async(source,key)=>{
+        const field=key.startsWith('field:')?key.slice(6):'prose';
+        const text=await invoke('ai_proofread_text',{source,field});
+        const formatter={project:formatProject,client:formatClient,address:formatAddress,shipTo:formatAddress}[field];
+        return formatter?formatter(text):text;
+      },
       write:(key,text)=>{
         const target=writingTarget(key);if(!target)return;
-        if(target.item!==undefined)state.items[target.item].description=text;
+        if(target.field)state[target.field]=text;
+        else if(target.item!==undefined)state.items[target.item].description=text;
         else {const entries=noteRows(state);entries[target.note]=text;setNoteRows(state,entries);}
         if(target.element)target.element.value=text;
       },
@@ -156,7 +165,9 @@
       const aiUndo=status.undoable||queued.pending||queued.errors.length;
       if(button){button.disabled=!aiUndo&&!undoStack.length;button.title=aiUndo?'Annuler toutes les corrections IA et la file, en gardant vos modifications':'Annuler la dernière modification';button.setAttribute('aria-label',button.title);}
       const output=document.querySelector('[data-writing-status]');
-      if(output)output.textContent=queued.pending?`Améliorations IA : ${queued.pending} ligne${queued.pending>1?'s':''} en cours ou en attente. Vous pouvez continuer à cliquer sur les étoiles.`:queued.errors.length?'Amélioration indisponible. Recliquez sur les étoiles de la ligne pour réessayer.':status.pending?'Correction du texte…':status.errors?'Correction indisponible. Réessayez avant de créer le PDF, imprimer ou envoyer.':'';
+      const documentButton=document.querySelector('[data-correct-document]');
+      if(documentButton)documentButton.setAttribute('aria-busy',String(documentCorrectionRunning));
+      if(output)output.textContent=documentCorrectionRunning?'Correction de tout le document…':queued.pending?`Améliorations IA : ${queued.pending} ligne${queued.pending>1?'s':''} en cours ou en attente. Vous pouvez continuer à cliquer sur les étoiles.`:queued.errors.length?'Amélioration indisponible. Recliquez sur les étoiles de la ligne pour réessayer.':status.pending?'Correction du texte…':status.errors?'Correction indisponible. Réessayez avant de créer le PDF, imprimer ou envoyer.':'';
       for(const star of document.querySelectorAll('[data-line-enhance]')) {
         const index=star.dataset.lineEnhance,note=noteIndex(index),key=note!==null?writingIds().notes[note]:writingIds().items[Number(index)];
         const field=writingFields().find(f=>f.key===key);
@@ -200,6 +211,20 @@
       if(state.id!==id)throw new Error('Le document a changé. Réessayez.');
       await validateDescriptionLimits();
       if(writingIds().items.some(key=>descriptionLimits.get(`${id}:${key}`)))throw new Error('Une description dépasse une page. Utilisez Ajouter une ligne pour continuer.');
+    }
+    async function correctDocumentWriting() {
+      if(busy||!state||voiceSession||activeCapture)return;
+      if(!await aiReady())return;
+      const id=state.id;
+      documentCorrectionRunning=true;setBusy(true);paintWritingStatus();
+      try {
+        await improvements.drain(id);
+        if(state.id!==id)throw new Error('Le document a changé. Réessayez.');
+        await automatic.ensureAll({includeManual:true,force:true});
+        if(!await saveNow())throw new Error('Les corrections ne sont pas encore enregistrées. Réessayez.');
+        notice('Écriture corrigée dans tout le document. Annuler en haut retire les corrections IA.');
+      }catch(error){notice(`Correction interrompue : ${errorText(error)}`);}
+      finally{documentCorrectionRunning=false;setBusy(false);paintWritingStatus();}
     }
     const errorText = error => String(error?.message || error || 'Erreur inconnue');
     const smallIcon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${({
@@ -701,7 +726,7 @@
       replaceAppMarkup(app, `${appHeader()}
         <div class="workbench">
         <section class="editor">
-          <div class="section-head"><div class="section-title"><h3>${kindTitle()} à remplir</h3></div><div class="section-tools"><button type="button" class="icon-button save-button" id="save-status" data-save data-state="${saveState()}" aria-label="Enregistrer le brouillon. ${esc(saveStatus)}" title="${esc(saveTooltip())}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v7h9V3M7 21v-8h10v8"></path></svg><span class="save-status-mark" aria-hidden="true"></span><span class="save-status-announcement sr-only" role="status" aria-live="polite">${esc(saveStatus)}</span></button><button type="button" class="icon-button" data-voice aria-label="Remplir en parlant" title="Remplir en parlant"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8"></path></svg></button><button type="button" class="icon-button" data-undo aria-label="Annuler la dernière modification" title="Annuler la dernière modification" ${undoStack.length ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h9a7 7 0 0 1 0 14"></path></svg></button><button type="button" class="icon-button reset-button" data-reset aria-label="Réinitialiser le brouillon" title="Réinitialiser le brouillon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7"></path></svg></button></div></div>
+          <div class="section-head"><div class="section-title"><h3>${kindTitle()} à remplir</h3></div><div class="section-tools"><button type="button" class="icon-button save-button" id="save-status" data-save data-state="${saveState()}" aria-label="Enregistrer le brouillon. ${esc(saveStatus)}" title="${esc(saveTooltip())}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v7h9V3M7 21v-8h10v8"></path></svg><span class="save-status-mark" aria-hidden="true"></span><span class="save-status-announcement sr-only" role="status" aria-live="polite">${esc(saveStatus)}</span></button><button type="button" class="icon-button" data-voice aria-label="Remplir en parlant" title="Remplir en parlant"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8"></path></svg></button><button type="button" class="icon-button" data-correct-document aria-label="Corriger tout le document avec l’IA" title="Corriger tout le document avec l’IA">${smallIcon('ai')}</button><button type="button" class="icon-button" data-undo aria-label="Annuler la dernière modification" title="Annuler la dernière modification" ${undoStack.length ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h9a7 7 0 0 1 0 14"></path></svg></button><button type="button" class="icon-button reset-button" data-reset aria-label="Réinitialiser le brouillon" title="Réinitialiser le brouillon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7"></path></svg></button></div></div>
           <div class="validation-panel" id="pdf-validation" role="alert" hidden></div>
           <div class="client-fields"><h4>Projet et client</h4><div class="client-grid">
             ${input('project','Nom du projet <span class="required">(obligatoire)</span>','Nom du projet')}
@@ -1696,9 +1721,18 @@
         return;
       }
       if (b.hasAttribute('data-undo')) { await undo(); return; }
+      if (b.hasAttribute('data-correct-document')) { await correctDocumentWriting(); return; }
       if (b.dataset.kind) {
         if (state.kind === b.dataset.kind) return;
-        if (state.issuedNumber) { notice('Cette facture est déjà émise. Créez un nouveau document pour changer de type.'); return; }
+        if (state.issuedNumber) {
+          if (!await flushChanges()) return;
+          const sourceId = state.id;
+          if (await nativeTransition('create_quote_from_invoice', {id: sourceId}, 'Soumission créée à partir de la facture. La facture originale est conservée.')) {
+            undoStack.push({openId: sourceId}); undoGroup = null;
+            document.querySelector('[data-undo]')?.removeAttribute('disabled');
+          }
+          return;
+        }
         rememberUndo();
         lineAssist = null;
         state.kind = b.dataset.kind;

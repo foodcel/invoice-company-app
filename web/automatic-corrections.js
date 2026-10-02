@@ -78,7 +78,7 @@ export function createAutomaticCorrections({getDocumentId,getFields,write,proofr
       // Yield before provider invocation so pending ownership is established.
       await Promise.resolve();
       try {
-        const corrected=await Promise.race([proofread(source),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('La correction prend trop de temps. Réessayez.')),timeoutMs);})]);
+        const corrected=await Promise.race([proofread(source,key),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('La correction prend trop de temps. Réessayez.')),timeoutMs);})]);
         const live=getDocumentId()===docId&&getFields().find(f=>f.key===key);
         if(epoch!==generation||!live||live.text!==source||entry.revision!==revision)return;
         if(typeof corrected!=='string'||!corrected.trim())throw new Error('La correction reçue est vide.');
@@ -97,10 +97,12 @@ export function createAutomaticCorrections({getDocumentId,getFields,write,proofr
     })();
     announce();return pending.promise;
   }
-  async function ensureAll() {
+  async function ensureAll({includeManual=false,force=false}={}) {
     const docId=getDocumentId();
+    const applicable=fields=>fields.filter(f=>includeManual||f.automatic!==false||entries().get(f.key)?.pending||entries().get(f.key)?.error);
+    if(force)for(const field of applicable(reconcile()))entries().get(field.key).checked=null;
     for(let attempt=0;attempt<8;attempt++) {
-      const fields=reconcile();
+      const fields=applicable(reconcile());
       // Serial requests bound provider work and keep failures actionable.
       for(const field of fields) {
         if(getDocumentId()!==docId)throw new Error('Le document a changé. Réessayez sur le document ouvert.');
@@ -109,7 +111,7 @@ export function createAutomaticCorrections({getDocumentId,getFields,write,proofr
         if(entry?.error)throw new Error(`Correction indisponible : ${entry.error}`);
       }
       if(getDocumentId()!==docId)throw new Error('Le document a changé.');
-      const latest=reconcile();
+      const latest=applicable(reconcile());
       if(latest.every(f=>!f.text.trim()||entries().get(f.key)?.checked===f.text))return true;
     }
     throw new Error('Le texte change encore. Terminez la saisie avant de continuer.');

@@ -515,6 +515,44 @@ impl Repository {
         store.response(&self.output_dir())
     }
 
+    fn create_quote_from_invoice(&self, id: &str) -> AppResult<StateResponse> {
+        let mut store = self.load()?;
+        if store.pending_export.is_some() {
+            return Err("Terminez le PDF en attente avant de créer la soumission.".into());
+        }
+        if store.current_id != id {
+            return Err("Le document a changé. Rouvrez la facture avant de créer la soumission.".into());
+        }
+        let source = &store.records[store.index(id)?].draft;
+        if source.kind != Kind::Facture || source.issued_number.is_none() {
+            return Err("Choisissez une facture émise pour créer sa soumission.".into());
+        }
+        if store.records.len() >= MAX_RECORDS {
+            return Err("Trop de documents enregistrés pour créer une soumission.".into());
+        }
+        let mut draft = source.clone();
+        draft.id = Uuid::new_v4().to_string();
+        draft.kind = Kind::Soumission;
+        draft.invoice_number = None;
+        draft.manual_invoice_number = None;
+        draft.issued_number = None;
+        draft.english_copy = None;
+        if draft.valid_until.trim().is_empty() && valid_date(&draft.date) {
+            let date = NaiveDate::parse_from_str(&draft.date, "%Y-%m-%d")
+                .map_err(|_| "Date du document invalide.".to_string())?;
+            draft.valid_until = (date + Duration::days(30)).format("%Y-%m-%d").to_string();
+        }
+        taxes::migrate_editable(&mut draft);
+        validate_draft(&draft)?;
+        store.current_id = draft.id.clone();
+        store.records.push(Record {
+            id: draft.id.clone(), draft, updated_at: Utc::now().to_rfc3339(),
+            exports: vec![], saved_versions: vec![], sent_at: None,
+        });
+        self.commit(&mut store)?;
+        store.response(&self.output_dir())
+    }
+
     fn restore_previous(&self, id: &str) -> AppResult<StateResponse> {
         let mut store = self.load()?;
         self.reconcile_pending(&mut store)?;
@@ -1690,6 +1728,15 @@ fn open_draft(
 }
 
 #[tauri::command]
+fn create_quote_from_invoice(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+    id: String,
+) -> AppResult<StateResponse> {
+    with_repo(app, lock, |repo| repo.create_quote_from_invoice(&id))
+}
+
+#[tauri::command]
 fn delete_draft(
     app: tauri::AppHandle,
     lock: tauri::State<'_, Mutex<()>>,
@@ -1837,9 +1884,10 @@ async fn ai_proofread_text(
     app: tauri::AppHandle,
     lock: tauri::State<'_, Mutex<()>>,
     source: String,
+    field: Option<String>,
 ) -> AppResult<String> {
     let provider = with_repo(app, lock, |repo| Ok(repo.load()?.ai_provider))?;
-    ai::proofread_text(&provider, &source).await
+    ai::proofread_text(&provider, &source, field.as_deref().unwrap_or("prose")).await
 }
 
 #[tauri::command]
@@ -1975,6 +2023,7 @@ pub fn run() {
             save_draft,
             new_draft,
             open_draft,
+            create_quote_from_invoice,
             delete_draft,
             restore_previous,
             load_document_versions,
@@ -2417,6 +2466,56 @@ mod tests {
         quote.kind = Kind::Soumission;
         quote.valid_until = "2027-02-10".into();
         assert_eq!(repo.save_draft(quote).unwrap().current.valid_until, "2027-02-10");
+    }
+
+    #[test]
+    fn issued_invoice_quote_copy_preserves_original_history_pdf_and_cursor() {
+        let (_temp, repo) = setup();
+        let mut draft = ready_invoice(&repo);
+        draft.date = "2026-12-20".into();
+        draft.valid_until.clear();
+        draft.note_entries = Some(vec!["Note conservée".into()]);
+        draft.notes = "Note conservée".into();
+        draft.payments = Some(vec![Payment {amount:"25".into(),date:"2026-12-20".into()}]);
+        let exported = repo.export_pdf(draft, PDF.to_vec(), Some(2060), "fr".into()).unwrap();
+        let before = repo.load().unwrap();
+        let quote = repo.create_quote_from_invoice(&exported.snapshot.id).unwrap();
+        assert_eq!(quote.current.kind, Kind::Soumission);
+        assert_ne!(quote.current.id, exported.snapshot.id);
+        assert_eq!(quote.current.valid_until, "2027-01-19");
+        assert_eq!(quote.current.invoice_number, None);
+        assert_eq!(quote.current.issued_number, None);
+        assert_eq!(quote.current.manual_invoice_number, None);
+        assert_eq!(quote.next_invoice_number, before.next_invoice_number);
+        let mut expected = exported.snapshot.clone();
+        expected.id = quote.current.id.clone(); expected.kind = Kind::Soumission;
+        expected.valid_until = "2027-01-19".into(); expected.invoice_number = None;
+        expected.manual_invoice_number = None; expected.issued_number = None; expected.english_copy = None;
+        assert_eq!(quote.current, expected);
+        let after = repo.load().unwrap();
+        assert_eq!(serde_json::to_value(&after.records[..before.records.len()]).unwrap(),serde_json::to_value(&before.records).unwrap());
+        assert_eq!(after.versions,before.versions);
+        assert!(after.records.last().unwrap().exports.is_empty());
+        assert_eq!(fs::read(exported.path).unwrap(), PDF);
+        assert_eq!(repo.load_state().unwrap().current, quote.current);
+        repo.open_draft(&exported.snapshot.id).unwrap();
+        let mut custom = exported.snapshot.clone(); custom.valid_until = "2027-02-10".into();
+        repo.save_draft(custom).unwrap();
+        assert_eq!(repo.create_quote_from_invoice(&exported.snapshot.id).unwrap().current.valid_until,"2027-02-10");
+    }
+
+    #[test]
+    fn quote_copy_rejects_unissued_and_stale_sources_without_writing() {
+        let (_temp, repo) = setup();
+        let draft = repo.save_draft(ready_invoice(&repo)).unwrap().current;
+        let before = fs::read(repo.primary()).unwrap();
+        assert!(repo.create_quote_from_invoice(&draft.id).is_err());
+        assert_eq!(fs::read(repo.primary()).unwrap(),before);
+        let issued = repo.export_pdf(draft, PDF.to_vec(), Some(2060), "fr".into()).unwrap();
+        repo.new_draft(Kind::Soumission).unwrap();
+        let before = fs::read(repo.primary()).unwrap();
+        assert!(repo.create_quote_from_invoice(&issued.snapshot.id).is_err());
+        assert_eq!(fs::read(repo.primary()).unwrap(),before);
     }
 
     #[test]

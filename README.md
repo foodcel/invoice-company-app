@@ -52,9 +52,11 @@ The first installation and updates should be exercised on Dad's actual PC before
 
 The local Nemotron runtime was exercised with a French recording over both file transcription and realtime WebSocket on this PC. The text AI integration has been checked against provider documentation and local response fixtures. It has not been exercised with a real subscription connection or live microphone on this PC, so field filling, rewriting, translation, and microphone input still require an end-to-end check. Review the English preview before creating its PDF; work-line rewrites still require explicit acceptance. Dictated document fields are saved as completed utterances are interpreted and must be reviewed before a customer PDF is created.
 
-## Current behavior (0.1.31)
+## Current behavior (0.1.32)
 
 These details supersede earlier workflow descriptions below and above: work-description stars queue improvements and apply results automatically. Edited descriptions and notes receive automatic French proofreading after leaving the field. The top Undo removes all AI corrections while preserving manual edits. PDF, Print and Send wait for required corrections; failed corrections must be retried or deliberately undone. AI requires a connected subscription and internet access.
+
+The AI button at the top corrects project/client names, billing/worksite addresses, all work descriptions and client notes together. It preserves quantities, prices, payment amounts, dates, telephone numbers and email addresses. Clicking **Soumission** on an issued invoice opens a separate quotation containing its current details; the original invoice, its number and its archived PDFs remain available in Documents. The top Undo can reopen the original invoice.
 
 Print only prints the in-memory document; cancelling it does not archive a PDF or issue an invoice number. Save Draft saves only the editable draft. Create PDF archives a new PDF version. The compact Letter layout repeats identity information on work continuation pages, keeps full totals on the final page, and displays no per-page subtotal. Older editable drafts use automatic province detection. Switching an unissued invoice to a quotation supplies a missing document date +30-day validity. The app offers available signed updates after startup and also supports a manual check in Settings.
 

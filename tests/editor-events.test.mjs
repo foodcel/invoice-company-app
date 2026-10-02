@@ -11,9 +11,12 @@ function editor(source) {
   const start = source.indexOf("    document.addEventListener('click', async event => {");
   const end = source.indexOf("    document.addEventListener('change', event => {");
   assert.ok(start >= 0 && end > start, 'Production event listeners were not found');
-  const listeners = {}, calls = { dirty: 0, saves: 0, render: 0, undo: 0, mail: 0, mailSettings: 0 };
+  const listeners = {}, calls = { dirty: 0, saves: 0, render: 0, undo: 0, mail: 0, mailSettings: 0, transitions: [] };
   const state = { id: 'probe', kind: 'facture', client: '', items: [{ description: '', quantity: '1', price: '' }], payments: [{ amount: '', date: '' }] };
   const context = {
+    undoStack:[],undoGroup:null,
+    flushChanges:async()=>true,
+    nativeTransition:async(name,args)=>{calls.transitions.push({name,args});return true;},
     automatic: {reconcile() {}, observe() {}, snapshot:()=>({undoable:false}), schedule:async()=>{}},
     writingIds:()=>({items:[],notes:[]}), validateDescriptionLimits:async()=>{}, paintWritingStatus() {},
     state, busy: false, rowMotionPending:false, mailOpen: false, englishMode: false, voiceSession: null, voiceRecovery: null,
@@ -51,6 +54,23 @@ test('type switch initializes absent quote validity from original date and prese
   probe.state.validUntil = '2027-02-10';
   await probe.click('', { kind: 'soumission' });
   assert.equal(probe.state.validUntil, '2027-02-10');
+});
+
+test('issued invoice Soumission click opens a native quote copy and Undo retains original identity', async () => {
+  const source=await readFile(new URL('../web/app.js',import.meta.url),'utf8');
+  async function exercise(code) {
+    const probe=editor(code);probe.state.issuedNumber=2060;
+    await probe.click('',{kind:'soumission'});
+    assert.deepEqual(probe.calls.transitions.map(t=>[t.name,t.args.id]),[['create_quote_from_invoice','probe']]);
+    assert.equal(probe.context.undoStack[0].openId,'probe');
+    assert.equal(probe.calls.dirty,0,'Original invoice is not converted in place');
+  }
+  await exercise(source);
+  const start=source.indexOf('        if (state.issuedNumber) {',source.indexOf('      if (b.dataset.kind) {'));
+  const end=source.indexOf('        rememberUndo();',start);assert.ok(start>=0&&end>start);
+  await assert.rejects(exercise(source.slice(0,start)+"        if (state.issuedNumber) return;\n"+source.slice(end)),/deep-equal/);
+  const failed=editor(source);failed.state.issuedNumber=2060;failed.context.flushChanges=async()=>false;
+  await failed.click('',{kind:'soumission'});assert.equal(failed.calls.transitions.length,0);
 });
 
 test('production form listeners preserve typing and route payment Add/Remove clicks', async () => {

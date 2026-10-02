@@ -1,6 +1,6 @@
 [package]
 name = "invoice-company-app"
-version = "0.1.31"
+version = "0.1.32"
 description = "Local quote and invoice app"
 edition = "2021"
 rust-version = "1.90"
