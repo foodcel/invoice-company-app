@@ -1,0 +1,28 @@
+{
+  "tag": "v0.1.31",
+  "url": "https://github.com/foodcel/invoice-company-app/releases/tag/v0.1.31",
+  "published": true,
+  "feedVersion": "0.1.31",
+  "installerBytes": 825124977,
+  "sha256": "24f9ebfa35c7580e3f639e000ae8a2dc69edd1204fb695b397d4677e359f5619",
+  "digestVerification": "GitHub asset digest",
+  "signatureMatches": true,
+  "installerHTTP": 200,
+  "assets": [
+    {
+      "name": "latest.json",
+      "size": 810,
+      "digest": "sha256:01190051e069a299ae2721ac2a28ea8d704ddcde6afe2e8a8b46fc6cd8bbc44a"
+    },
+    {
+      "name": "Soumissions-et-factures_0.1.31_x64-setup.exe",
+      "size": 825124977,
+      "digest": "sha256:24f9ebfa35c7580e3f639e000ae8a2dc69edd1204fb695b397d4677e359f5619"
+    },
+    {
+      "name": "Soumissions-et-factures_0.1.31_x64-setup.exe.sig",
+      "size": 460,
+      "digest": "sha256:bda2950101da1f36a7956ce61ac51b204f221de65fda92f58698624441488a8c"
+    }
+  ]
+}

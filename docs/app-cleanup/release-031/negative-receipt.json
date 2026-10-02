@@ -1,0 +1,6 @@
+{
+  "mutation": "Wrong local manifest version in owned temporary copy",
+  "caughtBy": "Live feed versus local metadata equality",
+  "exitCode": 1,
+  "providerCalls": 0
+}

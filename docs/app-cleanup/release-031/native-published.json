@@ -1,0 +1,25 @@
+{
+  "isolatedRecords": 1,
+  "result": {
+    "rid": 1508555735,
+    "currentVersion": "0.1.21",
+    "version": "0.1.31",
+    "date": "2026-10-02T00:08:18.859Z",
+    "body": "Mise à jour de l’application de soumissions et factures.",
+    "rawJson": {
+      "notes": "Mise à jour de l’application de soumissions et factures.",
+      "platforms": {
+        "windows-x86_64": {
+          "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVTZWU0JlYTZyVDBmNXArcEVIbWxBRlVhL0NwbHA1eWJka2EzWXpCOUVTZDlGTkNIR1BaSHIzM1FHc0lWZHdZY3BkUWhSK3h2a2pHRGgvTjJNL1ROaWFsRzBSQUZyQlE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwODk5MzAyCWZpbGU6U291bWlzc2lvbnMgZXQgZmFjdHVyZXNfMC4xLjMxX3g2NC1zZXR1cC5leGUJdmVyc2lvbjowLjEuMzEKQ2EwdHkwaGpmVHV5a3c0eWZGMFhRODQzVlJoeHBKcE9CM1pqWDRvZmlKd2tUWXRFU25iUzgwT2lZVHlFMThacVBURDJha05SaG5EQkM4bzkrSUwwQnc9PQo=",
+          "url": "https://github.com/foodcel/invoice-company-app/releases/download/v0.1.31/Soumissions-et-factures_0.1.31_x64-setup.exe"
+        }
+      },
+      "pub_date": "2026-10-02T00:08:18.859Z",
+      "version": "0.1.31"
+    }
+  },
+  "startupOfferChecked": true,
+  "realStateUnchanged": true,
+  "installCalled": false,
+  "cleanTeardown": true
+}
