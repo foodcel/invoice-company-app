@@ -1,0 +1,10 @@
+{
+  "version": "0.1.32",
+  "installer": "C:\\Users\\Mathys\\Desktop\\repos\\buisness\\app\\release-output\\v0.1.32\\Soumissions-et-factures_0.1.32_x64-setup.exe",
+  "bytes": 825125144,
+  "sha256": "32945af68e1c57de53214807a42147eb7139b02c1b631f3a75607ab25dbe90d3",
+  "signatureVerified": true,
+  "signatureMetadataVerified": true,
+  "tamperRejected": true,
+  "published": false
+}

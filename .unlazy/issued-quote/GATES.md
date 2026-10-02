@@ -12,8 +12,8 @@ User steering added a top whole-document AI correction button. It covers project
   EVIDENCE: npm run check: 170 passed, 0 failed; production click test includes the old issued guard as an isolated negative control.
 - [x] G3: Installed 0.1.32 UI switches a real issued record to a quote with the same details and readable preview; clean test teardown preserves originals.
   EVIDENCE: installed-receipt.json; INSTALLED_032_SWITCH_AND_AI_PASSED. Preserved all 14 records, 9 PDF hashes, history, selection and invoice cursor 2063; temporary drafts deleted. Installed quotation screenshot inspected.
-- [ ] G4: Signed 0.1.32 release and update feed are public and match tested package.
-  EVIDENCE: pending
+- [x] G4: Signed 0.1.32 release and update feed are public and match tested package.
+  EVIDENCE: PUBLIC_RELEASE_032_VERIFIED. https://github.com/foodcel/invoice-company-app/releases/tag/v0.1.32 is public. Latest feed version, signature, public asset SHA-256 and 825125144-byte installer all match the locally verified signed package. Source commit 7ecfd02.
 - [x] G5: Header AI corrects project/client/addresses/descriptions/notes, preserves numeric values, and all corrections share top Undo.
   CHECK: node tests/whole-document-ui.mjs
   EXPECT: WHOLE_DOCUMENT_UI_PASSED
