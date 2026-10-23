@@ -20,6 +20,8 @@ Native installed testing uses the real immutable Tauri bridge. The complete send
 ## Distribution
 
 Signed installer: `release-output/v0.1.33/Soumissions-et-factures_0.1.33_x64-setup.exe`.
-GitHub repository is currently private; anonymous latest release lookup returns 404. Release: https://github.com/foodcel/invoice-company-app/releases/tag/v0.1.33 (sign-in with repository access required). Automatic updater delivery is not verified and cannot work through the existing anonymous endpoint while it remains private. No visibility change performed. User choice requested after installer completion.
+The repository was initially private and anonymous latest-release lookup returned 404. After installer completion, the user explicitly approved making it public again. Visibility was restored to public; anonymous release verification passed for the configured updater manifest, signature asset, installer HTTP 200/size and SHA-256. See public-receipt.json. The earlier private-release-receipt.json records the initial authenticated verification, before this approved change.
+
+Public release: https://github.com/foodcel/invoice-company-app/releases/tag/v0.1.33. The existing updater endpoint now serves 0.1.33 without authentication. Actual Dad-PC installation and live Outlook delivery remain for user acceptance.
 
 Claude has not reviewed this.
