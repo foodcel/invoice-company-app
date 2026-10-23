@@ -15,7 +15,7 @@
 - [x] G4: Installed 0.1.33 opens the email composer after disconnected AI fails, preserves user data, and has a verified signed installer.
   EVIDENCE: build-windows.cmd exit 0; installer exit 0; installed-ai-optional-output.mjs exit 0 (real local AI credential failure, actual composer, six records and number cursor preserved, temporary draft removed). Two preexisting missing PDF references remain missing; no existing PDF bytes were available on this PC. verify-release.mjs exit 0 validates installer signature and rejects a tampered digest. No external send or live AI request.
 - [ ] G5: Dad can receive 0.1.33 through the existing automatic updater.
-  EVIDENCE: blocked by private GitHub repository. Signed manual installer is ready; explicit visibility choice requested after build and installed checks completed.
+  EVIDENCE: blocked by private GitHub repository. Signed manual installer is ready and private release v0.1.33 is published; authenticated remote digest, size and manifest signature checks passed. Explicit visibility choice requested after build and installed checks completed.
 
 Native prerequisite: initial check could not run because Visual Studio had no C++/SDK components. Standard Windows administrator prompt approved by user; installation completed with exit 0, then native tests passed.
 Release access: authenticated GitHub metadata reports PRIVATE for foodcel/invoice-company-app; anonymous latest-release API returns 404. Existing updater endpoint cannot retrieve private releases. No repository visibility change authorized or performed.

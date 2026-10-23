@@ -1,0 +1,10 @@
+{
+  "version": "0.1.33",
+  "privateReleasePublished": true,
+  "url": "https://github.com/foodcel/invoice-company-app/releases/tag/v0.1.33",
+  "assets": 3,
+  "sha256": "215870dcdd61becef965b01b0a50df5481b6c2717d135642bf835cd80b42e1f7",
+  "uploadedInstallerDigestMatches": true,
+  "uploadedManifestSignatureMatches": true,
+  "publicUpdaterAccessible": false
+}

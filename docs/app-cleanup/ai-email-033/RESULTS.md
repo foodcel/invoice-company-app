@@ -12,12 +12,14 @@ The exact oversized-response error comes from the bounded JSON reader. The model
 - Windows build and silent local installation: exit 0, version 0.1.33.
 - Installed app: a real disconnected-AI correction failure no longer blocks composer; original six records, history, selection and invoice counter preserved. Synthetic test draft removed. Two preexisting PDF references point to absent files; no local existing PDF files were available to hash.
 - Local installer signature verified against updater key; corrupted digest rejected.
+- Final comparison against the original preinstallation backup preserved records, versions, current selection, numbering/reset state and all PDF folder settings. Object key order changed during serialization; semantic comparison passed.
+- Private GitHub release v0.1.33 published with three assets. Authenticated verification matches the uploaded installer SHA-256/size and manifest signature to the locally tested package; receipt saved alongside this report.
 
 Native installed testing uses the real immutable Tauri bridge. The complete send flow is covered using simulated mail transport in browser/helper tests; real Outlook delivery and Dad-PC acceptance remain unverified.
 
 ## Distribution
 
 Signed installer: `release-output/v0.1.33/Soumissions-et-factures_0.1.33_x64-setup.exe`.
-GitHub repository is currently private; anonymous latest release lookup returns 404. Automatic updater delivery is not verified and cannot work through the existing anonymous endpoint while it remains private. No visibility change performed. User choice requested after installer completion.
+GitHub repository is currently private; anonymous latest release lookup returns 404. Release: https://github.com/foodcel/invoice-company-app/releases/tag/v0.1.33 (sign-in with repository access required). Automatic updater delivery is not verified and cannot work through the existing anonymous endpoint while it remains private. No visibility change performed. User choice requested after installer completion.
 
 Claude has not reviewed this.
