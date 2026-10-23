@@ -1,5 +1,6 @@
 import './pdf.test.mjs';
 import './automatic-corrections.test.mjs';
+import './ai-optional-output.test.mjs';
 import './ai-improvement-queue.test.mjs';
 import './writing-pages-pdf.test.mjs';
 import './writing-formatting.test.mjs';

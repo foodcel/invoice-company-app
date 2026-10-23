@@ -1,0 +1,13 @@
+{
+  "version": "0.1.33",
+  "composerAfterDisconnectedAiFailure": true,
+  "outlookConnectionStatusShown": true,
+  "externalSends": 0,
+  "liveAiCalls": 0,
+  "recordsPreserved": 6,
+  "pdfsPreserved": 0,
+  "preexistingMissingPdfReferences": 2,
+  "selectionAndCursorPreserved": true,
+  "temporaryDraftRemoved": true,
+  "errors": []
+}

@@ -1,0 +1,28 @@
+{
+  "results": [
+    {
+      "mode": "failed",
+      "composerOpened": true,
+      "actualPdfPages": 1,
+      "mockedSends": 1,
+      "outputAiCalls": 0
+    },
+    {
+      "mode": "pending",
+      "composerOpened": true,
+      "actualPdfPages": 1,
+      "mockedSends": 1,
+      "outputAiCalls": 0
+    },
+    {
+      "mode": "disconnected",
+      "composerOpened": true,
+      "actualPdfPages": 1,
+      "mockedSends": 1,
+      "outputAiCalls": 0
+    }
+  ],
+  "errors": [],
+  "externalSends": 0,
+  "providerCalls": 0
+}

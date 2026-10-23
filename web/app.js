@@ -167,7 +167,7 @@
       const output=document.querySelector('[data-writing-status]');
       const documentButton=document.querySelector('[data-correct-document]');
       if(documentButton)documentButton.setAttribute('aria-busy',String(documentCorrectionRunning));
-      if(output)output.textContent=documentCorrectionRunning?'Correction de tout le document…':queued.pending?`Améliorations IA : ${queued.pending} ligne${queued.pending>1?'s':''} en cours ou en attente. Vous pouvez continuer à cliquer sur les étoiles.`:queued.errors.length?'Amélioration indisponible. Recliquez sur les étoiles de la ligne pour réessayer.':status.pending?'Correction du texte…':status.errors?'Correction indisponible. Réessayez avant de créer le PDF, imprimer ou envoyer.':'';
+      if(output)output.textContent=documentCorrectionRunning?'Correction de tout le document…':queued.pending?`Améliorations IA : ${queued.pending} ligne${queued.pending>1?'s':''} en cours ou en attente. Vous pouvez continuer à cliquer sur les étoiles.`:queued.errors.length||status.errors?'Correction IA indisponible. Vous pouvez créer le PDF, imprimer ou envoyer le texte actuel.':status.pending?'Correction du texte…':'';
       for(const star of document.querySelectorAll('[data-line-enhance]')) {
         const index=star.dataset.lineEnhance,note=noteIndex(index),key=note!==null?writingIds().notes[note]:writingIds().items[Number(index)];
         const field=writingFields().find(f=>f.key===key);
@@ -206,8 +206,8 @@
     async function finishWritingForOutput() {
       const id=state.id;
       for(const field of ['project','client','address','shipTo','contact'])formatEnteredField(field);
-      await improvements.drain(id);
-      await automatic.ensureAll();
+      improvements.cancel(id);
+      automatic.useCurrentText();
       if(state.id!==id)throw new Error('Le document a changé. Réessayez.');
       await validateDescriptionLimits();
       if(writingIds().items.some(key=>descriptionLimits.get(`${id}:${key}`)))throw new Error('Une description dépasse une page. Utilisez Ajouter une ligne pour continuer.');

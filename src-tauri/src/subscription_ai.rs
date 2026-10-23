@@ -65,11 +65,20 @@ fn client() -> Result<Client, String> {
         .user_agent("invoice-company-app/subscription").build()
         .map_err(|_| "Connexion ChatGPT indisponible.".into())
 }
-async fn json_response(mut response: reqwest::Response) -> Result<Value, String> {
+const AUTH_JSON_LIMIT: usize = 512_000;
+const MODEL_CATALOG_JSON_LIMIT: usize = 4 * 1024 * 1024;
+
+async fn json_response(response: reqwest::Response) -> Result<Value, String> {
+    bounded_json_response(response, AUTH_JSON_LIMIT, "Réponse ChatGPT trop volumineuse.").await
+}
+async fn model_catalog_response(response: reqwest::Response) -> Result<Value, String> {
+    bounded_json_response(response, MODEL_CATALOG_JSON_LIMIT, "Catalogue de modèles ChatGPT trop volumineux.").await
+}
+async fn bounded_json_response(mut response: reqwest::Response, limit: usize, size_error: &str) -> Result<Value, String> {
     if !response.status().is_success() { return Err(http_error(response).await); }
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| "Réponse ChatGPT interrompue.")? {
-        if bytes.len() + chunk.len() > 512_000 { return Err("Réponse ChatGPT trop volumineuse.".into()); }
+        if bytes.len().checked_add(chunk.len()).is_none_or(|size| size > limit) { return Err(size_error.into()); }
         bytes.extend_from_slice(&chunk);
     }
     serde_json::from_slice(&bytes).map_err(|_| "Réponse ChatGPT invalide.".into())
@@ -421,7 +430,7 @@ fn request_body(model: &str, instructions: &str, input: &str, schema_name: &str,
 }
 async fn text_request(token: String, instructions: &str, input: &str, schema_name: &str, schema: Value) -> Result<Value, String> {
     let cli = client()?;
-    let catalog = json_response(cli.get(format!("{RESOURCE}/models")).bearer_auth(&token).send().await.map_err(|_| "Catalogue de l’abonnement indisponible.")?).await?;
+    let catalog = model_catalog_response(cli.get(format!("{RESOURCE}/models")).bearer_auth(&token).send().await.map_err(|_| "Catalogue de l’abonnement indisponible.")?).await?;
     let models = catalog["models"].as_array().ok_or("Catalogue d’abonnement ChatGPT invalide.")?;
     let visible = models.iter().filter(|m| m["visibility"] == "list").filter_map(|m| m["slug"].as_str()).collect::<Vec<_>>();
     let model = ["gpt-6-luna", "gpt-6.1-sol"].iter().find(|m| visible.contains(m)).copied()
@@ -439,6 +448,110 @@ async fn text_request(token: String, instructions: &str, input: &str, schema_nam
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Real HTTP framing and reqwest body reads, exclusively over loopback with no
+    // proxy, credentials, application state, or external provider involved.
+    async fn http_json_fixture(body: Vec<u8>, chunked: bool, catalog: bool, status: u16) -> Result<Value, String> {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = async move {
+            let (mut socket, _) = listener.accept().await?;
+            let mut request = Vec::new();
+            while !request.ends_with(b"\r\n\r\n") {
+                request.push(socket.read_u8().await?);
+                assert!(request.len() <= 8192, "Unexpected fixture request size");
+            }
+            let framing = if chunked { "Transfer-Encoding: chunked\r\n".to_owned() }
+                else { format!("Content-Length: {}\r\n", body.len()) };
+            socket.write_all(format!("HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nConnection: close\r\n{framing}\r\n").as_bytes()).await?;
+            if chunked {
+                // No Content-Length: only cumulative body accounting can enforce
+                // the cap. Each HTTP chunk is far smaller than either limit.
+                for part in body.chunks(8191) {
+                    socket.write_all(format!("{:x}\r\n", part.len()).as_bytes()).await?;
+                    socket.write_all(part).await?;
+                    socket.write_all(b"\r\n").await?;
+                }
+                socket.write_all(b"0\r\n\r\n").await?;
+            } else {
+                socket.write_all(&body).await?;
+            }
+            socket.shutdown().await
+        };
+        let reader = async move {
+            let cli = Client::builder().no_proxy().timeout(Duration::from_secs(5)).build().unwrap();
+            let response = cli.get(format!("http://{address}/fixture")).send().await.unwrap();
+            if catalog { model_catalog_response(response).await } else { json_response(response).await }
+        };
+        // Joined futures keep ownership of both sockets; timeout drops both sides.
+        let (served, result) = tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::join!(server, reader)
+        }).await.expect("Local HTTP fixture timed out");
+        if let Err(error) = served {
+            assert!(result.is_err() && matches!(error.kind(),
+                std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted),
+                "Unexpected fixture server error: {error}");
+        }
+        result
+    }
+
+    fn catalog_fixture_bytes(length: usize) -> Vec<u8> {
+        let mut value = json!({"models":[{"slug":"synthetic-model","visibility":"list"}],
+            "private":"synthetic-private-body", "padding":""});
+        let overhead = serde_json::to_vec(&value).unwrap().len();
+        value["padding"] = json!("x".repeat(length.checked_sub(overhead).unwrap()));
+        let bytes = serde_json::to_vec(&value).unwrap();
+        assert_eq!(bytes.len(), length);
+        bytes
+    }
+
+    #[tokio::test]
+    async fn http_catalog_accepts_valid_json_above_old_limit() {
+        for chunked in [false, true] {
+            let value = http_json_fixture(catalog_fixture_bytes(600_000), chunked, true, 200).await.unwrap();
+            assert_eq!(value["models"][0]["slug"], "synthetic-model");
+            assert_eq!(value["models"][0]["visibility"], "list");
+        }
+    }
+
+    #[tokio::test]
+    async fn http_catalog_enforces_four_mib_boundary_including_chunked_bodies() {
+        for chunked in [false, true] {
+            for length in [4_194_303, 4_194_304] {
+                let value = http_json_fixture(catalog_fixture_bytes(length), chunked, true, 200).await.unwrap();
+                assert_eq!(value["models"][0]["slug"], "synthetic-model");
+            }
+            let error = http_json_fixture(catalog_fixture_bytes(4_194_305), chunked, true, 200).await.unwrap_err();
+            assert_eq!(error, "Catalogue de modèles ChatGPT trop volumineux.");
+            assert!(!error.contains("synthetic-private-body"));
+        }
+    }
+
+    #[tokio::test]
+    async fn http_auth_keeps_original_byte_limit_and_private_error() {
+        for chunked in [false, true] {
+            for length in [511_999, 512_000] {
+                let value = http_json_fixture(catalog_fixture_bytes(length), chunked, false, 200).await.unwrap();
+                assert_eq!(value["private"], "synthetic-private-body");
+            }
+            let error = http_json_fixture(catalog_fixture_bytes(512_001), chunked, false, 200).await.unwrap_err();
+            assert_eq!(error, "Réponse ChatGPT trop volumineuse.");
+            assert!(!error.contains("synthetic-private-body"));
+        }
+    }
+
+    #[tokio::test]
+    async fn http_json_preserves_parse_and_http_errors_without_leaking_bodies() {
+        for catalog in [false, true] {
+            let malformed = http_json_fixture(b"synthetic-private-body invalid JSON".to_vec(), true, catalog, 200).await.unwrap_err();
+            assert_eq!(malformed, "Réponse ChatGPT invalide.");
+            let body = br#"{"error":{"code":"subscription_sharing_user_not_eligible","message":"synthetic-private-body"}}"#.to_vec();
+            let rejected = http_json_fixture(body, false, catalog, 403).await.unwrap_err();
+            assert!(rejected.contains("HTTP 403") && rejected.contains("pas autorisée"));
+            assert!(!rejected.contains("synthetic-private-body"));
+        }
+    }
+
     #[test]
     fn subscription_body_omits_unsupported_fields_and_keeps_structured_transport() {
         let schema = json!({"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false});

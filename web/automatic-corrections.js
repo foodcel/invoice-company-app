@@ -116,6 +116,16 @@ export function createAutomaticCorrections({getDocumentId,getFields,write,proofr
     }
     throw new Error('Le texte change encore. Terminez la saisie avant de continuer.');
   }
+  function useCurrentText() {
+    // Output uses exactly the current text. Revoke late provider writes without
+    // undoing accepted corrections or losing their manual-preserving Undo.
+    generation++;
+    for(const field of reconcile()) {
+      const entry=entries().get(field.key);
+      entry.checked=field.text;entry.error='';entry.revision++;entry.pending=null;
+    }
+    announce();
+  }
   function undoAll() {
     generation++;let count=0;
     for(const field of reconcile()) {
@@ -135,5 +145,5 @@ export function createAutomaticCorrections({getDocumentId,getFields,write,proofr
     write(key,text);onChange();announce();return true;
   }
   function supersede(key){const field=reconcile().find(f=>f.key===key);if(!field)return;const entry=observe(key,field.text);entry.revision++;entry.pending=null;entry.error='';announce();}
-  return {observe,schedule,ensureAll,undoAll,snapshot,reconcile,applyImprovement,supersede};
+  return {observe,schedule,ensureAll,useCurrentText,undoAll,snapshot,reconcile,applyImprovement,supersede};
 }
