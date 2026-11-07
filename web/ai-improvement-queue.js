@@ -33,7 +33,7 @@ export function createImprovementQueue({isCurrent,run,onResult,onStatus=()=>{},t
   }
   async function drain(documentId) {
     while(active(documentId).length)await new Promise(resolve=>{const done=()=>{watchers.delete(done);resolve();};watchers.add(done);});
-    const failures=snapshot(documentId).errors;if(failures.length)throw new Error('Une amélioration IA a échoué. Recliquez sur les étoiles de la ligne pour réessayer.');
+    const failures=snapshot(documentId).errors;if(failures.length)throw new Error(`Une amélioration IA a échoué : ${failures[0].error || 'cause inconnue'} Recliquez sur les étoiles de la ligne pour réessayer.`);
   }
   function cancel(documentId) {
     // Cancellation invalidates ownership, even if a provider reply arrives later.

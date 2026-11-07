@@ -172,7 +172,7 @@
         const index=star.dataset.lineEnhance,note=noteIndex(index),key=note!==null?writingIds().notes[note]:writingIds().items[Number(index)];
         const field=writingFields().find(f=>f.key===key);
         const job=[...queued.jobs].reverse().find(j=>j.key===key&&(['waiting','running'].includes(j.status)||(j.status==='error'&&j.source===field?.text)||(j.status==='done'&&j.result===field?.text)));
-        if(job){star.dataset.aiQueueState=job.status;star.title={waiting:'En attente dans la file IA',running:'Amélioration en cours',done:'Amélioration appliquée — Annuler en haut pour la retirer',error:'Amélioration échouée — cliquez pour réessayer'}[job.status];star.setAttribute('aria-label',star.title);}
+        if(job){star.dataset.aiQueueState=job.status;star.title={waiting:'En attente dans la file IA',running:'Amélioration en cours',done:'Amélioration appliquée — Annuler en haut pour la retirer',error:`Amélioration échouée : ${job.error || 'cause inconnue'} Cliquez pour réessayer.`}[job.status];star.setAttribute('aria-label',star.title);}
         else {delete star.dataset.aiQueueState;star.title='Améliorer cette ligne avec l’IA';star.setAttribute('aria-label',star.title);}
         star.setAttribute('aria-busy',String(job?.status==='running'));
       }

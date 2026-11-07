@@ -82,7 +82,7 @@ export function createAutomaticCorrections({getDocumentId,getFields,write,proofr
         const live=getDocumentId()===docId&&getFields().find(f=>f.key===key);
         if(epoch!==generation||!live||live.text!==source||entry.revision!==revision)return;
         if(typeof corrected!=='string'||!corrected.trim())throw new Error('La correction reçue est vide.');
-        const numbers=t=>(t.match(/\d+(?:[.,]\d+)?/g)||[]).join('|');
+        const numbers=t=>(t.match(/\d+(?:[.,]\d+)?/g)||[]).sort().join('|');
         if(numbers(source)!==numbers(corrected))throw new Error('La correction a modifié un nombre; le texte original est conservé.');
         if(corrected!==source) {
           const manual=reverseOwned(source,entry.patches);
