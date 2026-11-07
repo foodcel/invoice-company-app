@@ -193,23 +193,28 @@ export function createDocumentLibrary({ getRecords, getState, command, transitio
       ? `<div class="library-search search">${icon('search')}<input id="library-search-input" type="search" data-library-search data-recent-search aria-label="Rechercher un document" placeholder="Client, projet ou numéro" value="${escapeText(query)}"><button type="button" data-library-action="close-search" aria-label="Fermer la recherche" title="Fermer la recherche">${icon('close')}</button></div>`
       : `<button type="button" class="library-search-toggle" data-library-action="open-search" aria-label="Rechercher un document" title="Rechercher un document" aria-expanded="false">${icon('search')}</button>`}`;
   }
+  // Column widths of the search/filter row, used to stretch the tabs smoothly between layouts.
   function searchRects() {
     if (typeof document === 'undefined') return null;
     const toolbar = document.querySelector('.library-toolbar');
-    if (!toolbar) return null;
-    return Object.fromEntries([...toolbar.querySelectorAll('[data-library-filter]')].map(el => [el.dataset.libraryFilter, el.getBoundingClientRect()]));
+    const filters = toolbar?.querySelector('.library-filters');
+    return toolbar && filters && toolbar.firstElementChild !== filters
+      ? [toolbar.firstElementChild.getBoundingClientRect().width, filters.getBoundingClientRect().width] : null;
   }
   function animateSearch(before) {
     if (!before || typeof document === 'undefined' || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const toolbar = document.querySelector('.library-toolbar');
+    const filters = toolbar?.querySelector('.library-filters');
+    if (!toolbar?.animate || !filters || toolbar.firstElementChild === filters) return;
+    const after = [toolbar.firstElementChild.getBoundingClientRect().width, filters.getBoundingClientRect().width];
+    const columns = pair => `${pair[0]}px ${pair[1]}px`;
     const options = { duration:240, easing:'cubic-bezier(.2,.8,.2,1)' };
-    for (const el of document.querySelectorAll('[data-library-filter]')) {
-      const old = before[el.dataset.libraryFilter], next = el.getBoundingClientRect();
-      if (old) el.animate?.([{ transform:`translateX(${old.x - next.x}px)`, opacity:.65 }, { transform:'translateX(0)', opacity:1 }], options);
-    }
-    if (searchOpen) document.querySelector('.library-search')?.animate?.([
-      { clipPath:'inset(0 calc(100% - 52px) 0 0 round 8px)', opacity:.65 },
-      { clipPath:'inset(0 0 0 0 round 8px)', opacity:1 }
-    ], options);
+    // The tabs share the growing column evenly, so they stretch instead of sliding in.
+    toolbar.classList.add('filters-animating');
+    const stretch = toolbar.animate([{ gridTemplateColumns:columns(before) }, { gridTemplateColumns:columns(after) }], options);
+    const done = () => toolbar.classList.remove('filters-animating');
+    stretch.addEventListener('finish', done); stretch.addEventListener('cancel', done);
+    if (!searchOpen) toolbar.firstElementChild.animate?.([{ opacity:0 }, { opacity:1 }], { duration:160, delay:80, easing:'ease-out', fill:'backwards' });
   }
   async function loadPdf() {
     clearPdf();

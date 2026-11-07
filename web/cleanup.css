@@ -232,3 +232,6 @@ html.modal-open body { position:fixed; top:var(--modal-scroll-top); left:0; righ
   .v1 .actions.email-output-actions [data-send-email],.v1 .actions.email-output-actions [data-send-email] svg { transition:none; }
   .v1 .actions.email-output-actions [data-send-email]:hover,.v1 .actions.email-output-actions [data-send-email]:hover svg { transform:none; }
 }
+/* While the search row changes layout, the three tabs share their column evenly so they stretch instead of popping. */
+.library-dialog .library-toolbar.filters-animating .library-filters button { flex:1 1 0; min-width:0; overflow:hidden; }
+.library-dialog .library-toolbar.filters-animating .library-filters { overflow:hidden; }

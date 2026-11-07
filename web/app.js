@@ -245,7 +245,7 @@
     function preferencesDialog() {
       if (!preferencesOpen) return '';
       if (appearanceOpen) return `<div class="preferences-layer" data-preferences-outside><section class="preferences-panel settings-pane" role="dialog" aria-modal="true" aria-labelledby="appearance-title">${settingsHeader('Apparence', 'appearance-title', 'data-close-preferences')}<div class="settings-body appearance-options"><fieldset class="appearance-group"><legend>Mode</legend><div class="theme-choices" role="group" aria-label="Mode d’affichage">${[['light','Clair'],['dark','Sombre']].map(([value,label])=>`<button type="button" data-theme="${value}" aria-pressed="${theme===value}">${label}</button>`).join('')}</div></fieldset><fieldset class="appearance-group"><legend>Couleur</legend><div class="palette-choices">${Object.entries(palettes).map(([value,p])=>`<button type="button" class="palette-choice" data-palette="${value}" aria-pressed="${palette===value}"><i class="palette-swatch" style="--swatch:${p[theme][0]}" aria-hidden="true"></i><span>${p.label}</span></button>`).join('')}</div></fieldset><fieldset class="appearance-group"><legend>Fond des panneaux</legend><div class="theme-choices" role="group" aria-label="Intensité de la couleur">${[['soft','Doux'],['strong','Plus marqué']].map(([value,label])=>`<button type="button" data-tint="${value}" aria-pressed="${tint===value}">${label}</button>`).join('')}</div></fieldset><div class="appearance-example"><span>Aperçu — panneau et champ à remplir</span><div>Votre texte ici</div></div><p class="recent-hint">Vos choix sont enregistrés sur cet ordinateur. Les couleurs des documents PDF restent celles de l’entreprise.</p></div></section></div>`;
-      return `<div class="preferences-layer" data-preferences-outside><section id="preferences-panel" class="preferences-panel settings-pane" role="dialog" aria-modal="true" aria-labelledby="preferences-title">${settingsHeader('Réglages', 'preferences-title', 'data-close-preferences', false, false)}<div class="settings-body preferences-content"><button type="button" class="preference-row appearance-row" data-appearance>${smallIcon('theme')}<span><strong>Apparence</strong><small>${palettes[palette].label} · ${theme === 'dark' ? 'Sombre' : 'Clair'} · Couleurs et contraste</small></span><span>›</span></button><button type="button" class="preference-row" data-folder>${smallIcon('folder')}<span><strong>Dossiers des PDF</strong><small>Factures et soumissions</small></span><span>›</span></button><button type="button" class="preference-row" data-mail-settings>${smallIcon('mail')}<span><strong>Courriel Outlook</strong><small>Compte, copie au comptable et signature</small></span><span>›</span></button><button type="button" class="preference-row" data-ai-settings>${smallIcon('ai')}<span><strong>Intelligence artificielle</strong><small>Connexion et abonnement ChatGPT</small></span><span>›</span></button><button type="button" class="preference-row" data-check-update>${smallIcon('update')}<span><strong>Mises à jour</strong><small>Version ${packageInfo.version} · Vérification à l’ouverture</small></span><span>›</span></button></div></section></div>`;
+      return `<div class="preferences-layer" data-preferences-outside><section id="preferences-panel" class="preferences-panel settings-pane" role="dialog" aria-modal="true" aria-labelledby="preferences-title">${settingsHeader('Réglages', 'preferences-title', 'data-close-preferences', false, false)}<div class="settings-body preferences-content"><button type="button" class="preference-row appearance-row" data-appearance>${smallIcon('theme')}<span><strong>Apparence</strong><small>${palettes[palette].label} · ${theme === 'dark' ? 'Sombre' : 'Clair'} · Couleurs et contraste</small></span><span>›</span></button><button type="button" class="preference-row" data-folder>${smallIcon('folder')}<span><strong>Dossiers des PDF</strong><small>Factures et soumissions</small></span><span>›</span></button><button type="button" class="preference-row" data-mail-settings>${smallIcon('mail')}<span><strong>Courriel Outlook</strong><small>Compte, copie au comptable et signature</small></span><span>›</span></button><button type="button" class="preference-row" data-ai-settings>${smallIcon('ai')}<span><strong>Intelligence artificielle</strong><small>Clés API ChatGPT et Claude</small></span><span>›</span></button><button type="button" class="preference-row" data-check-update>${smallIcon('update')}<span><strong>Mises à jour</strong><small>Version ${packageInfo.version} · Vérification à l’ouverture</small></span><span>›</span></button></div></section></div>`;
     }
     function closePreferences() {
       preferencesOpen = false; appearanceOpen = false; render(); document.querySelector('[data-preferences]')?.focus();
@@ -533,8 +533,8 @@
       if (!parseDate(state.date)) add('[data-field="date"]', 'Date du document');
       if (state.kind === 'soumission' && !parseDate(state.validUntil)) add('[data-field="validUntil"]', 'Date de validité');
       if (state.dueDate && !parseDate(state.dueDate)) add('[data-field="dueDate"]', 'Date limite de paiement');
-      if (!state.project.trim()) add('[data-field="project"]', 'Nom du projet');
       if (!state.client.trim()) add('[data-field="client"]', 'Nom du client');
+      if (!state.project.trim()) add('[data-field="project"]', 'Nom du projet');
       if (!state.address.trim()) add('[data-field="address"]', 'Adresse de facturation');
       for (const [index, item] of state.items.entries()) {
         if (!item.description?.trim()) add(`[data-item="${index}"][data-key="description"]`, `Description de la ligne ${index + 1}`);
@@ -647,26 +647,24 @@
       if (!settingsOpen) return '';
       if (!aiSettings) return `<div class="recent-backdrop"><div class="recent-panel ai-settings-panel settings-pane" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title" tabindex="-1">${settingsHeader('Réglages de l’IA', 'ai-settings-title', 'data-close-ai-settings', settingsBusy)}<div class="settings-body"><p>${settingsError ? esc(settingsError) : 'Chargement des réglages…'}</p></div></div></div>`;
       const provider = aiSettings.provider;
-      const business = provider === 'business';
-      const activeConfigured = business ? aiSettings.businessConfigured : provider === 'chatgpt' && aiSettings.chatgptConfigured;
+      const claude = provider === 'claude';
+      const service = claude ? 'Claude' : 'ChatGPT';
+      const activeConfigured = claude ? aiSettings.claudeConfigured : aiSettings.openaiConfigured;
       const disabled = settingsBusy ? 'disabled' : '';
       return `<div class="recent-backdrop"><div class="recent-panel ai-settings-panel settings-pane" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title" tabindex="-1">
         ${settingsHeader('Réglages de l’IA', 'ai-settings-title', 'data-close-ai-settings', settingsBusy)}<div class="settings-body">
-        <p class="recent-hint">Choisissez le compte utilisé pour rédiger, améliorer et traduire vos documents.</p>
+        <p class="recent-hint">Choisissez le service utilisé pour rédiger, améliorer et traduire vos documents. Une clé API fonctionne toujours, sans connexion à un compte.</p>
         <fieldset class="provider-choices"><legend>Votre service</legend>
-          <label><input type="radio" name="ai-provider" value="chatgpt" ${provider === 'chatgpt' ? 'checked' : ''} ${disabled}> <span><strong>ChatGPT Sub</strong><small>Abonnement personnel</small></span></label>
-          <label><input type="radio" name="ai-provider" value="business" ${business ? 'checked' : ''} ${disabled}> <span><strong>ChatGPT Business</strong><small>Espace de travail</small></span></label>
+          <label><input type="radio" name="ai-provider" value="openai" ${!claude ? 'checked' : ''} ${disabled}> <span><strong>ChatGPT</strong><small>Clé API OpenAI${aiSettings.openaiConfigured ? ' · enregistrée' : ''}</small></span></label>
+          <label><input type="radio" name="ai-provider" value="claude" ${claude ? 'checked' : ''} ${disabled}> <span><strong>Claude</strong><small>Clé API Anthropic${aiSettings.claudeConfigured ? ' · enregistrée' : ''}</small></span></label>
         </fieldset>
-        <section class="ai-account"><div class="ai-account-heading"><strong>${business ? 'ChatGPT Business' : 'ChatGPT Sub'}</strong><span class="ai-connection ${activeConfigured ? 'connected' : ''}">${aiSettings.authPending ? 'En attente' : activeConfigured ? 'Connecté' : 'Non connecté'}</span></div>
-        ${business ? `<p class="settings-note">Utilise un jeton d’accès Codex créé dans votre espace ChatGPT Business, selon ses autorisations et limites.</p>
-        <p class="settings-note">Dans ChatGPT : Paramètres de l’espace → Access tokens → Create. Choisissez Codex si des portées sont proposées. Collez le jeton ci-dessous, uniquement sur cet ordinateur.</p>
-        <label for="ai-key">${activeConfigured ? 'Remplacer le ' : 'Ajouter le '}jeton Business<input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="Jeton d’accès Codex de l’espace Business" ${disabled}></label>
-        <div class="folder-actions"><button type="button" class="primary" data-save-ai-key ${disabled}>Enregistrer le jeton</button>${activeConfigured ? `<button type="button" class="plain-button" data-test-ai ${disabled}>Tester la connexion</button><button type="button" class="plain-button" data-remove-ai-key ${disabled}>Supprimer</button>` : ''}</div>` : `<p class="settings-note">Connectez votre compte ChatGPT pour utiliser votre abonnement Pro / personnel.</p>
-        ${aiSettings.authPending ? '<p class="settings-note" role="status">Connexion en attente. Terminez la connexion dans le navigateur, puis actualisez ici.</p>' : ''}
-        <div class="folder-actions"><button type="button" class="primary" data-start-chatgpt-login ${settingsBusy || aiSettings.authPending ? 'disabled' : ''}>Se connecter à ChatGPT</button>${aiSettings.authPending ? `<button type="button" class="plain-button" data-refresh-ai-settings ${disabled}>Actualiser la connexion</button><button type="button" class="plain-button" data-cancel-chatgpt-login ${disabled}>Annuler la connexion</button>` : ''}${activeConfigured ? `<button type="button" class="plain-button" data-test-ai ${disabled}>Tester la connexion</button>` : ''}${activeConfigured || aiSettings.authError ? `<button type="button" class="plain-button" data-disconnect-chatgpt ${disabled}>Déconnecter ChatGPT</button>` : ''}</div>`}
-        </section><p class="settings-note ai-privacy">${settingsBusy ? 'Traitement en cours… ' : ''}Identifiants protégés dans le coffre de Windows. Le test utilise trois demandes d’exemple.</p><details class="ai-information"><summary>À propos de la dictée et des services</summary><p class="settings-note">Le microphone est transcrit localement avec Nemotron 3.5. Le texte reconnu est ensuite envoyé au service choisi.</p><p class="settings-note">Z.ai et Claude : connexion par abonnement non disponible dans cette version.</p></details>
+        <section class="ai-account"><div class="ai-account-heading"><strong>${service}</strong><span class="ai-connection ${activeConfigured ? 'connected' : ''}">${activeConfigured ? 'Clé enregistrée' : 'Aucune clé'}</span></div>
+        <p class="settings-note">${claude ? 'Créez une clé sur console.anthropic.com, section API keys. Elle commence par « sk-ant- ».' : 'Créez une clé sur platform.openai.com, section API keys. Elle commence par « sk- ».'} Collez-la ci-dessous, uniquement sur cet ordinateur.</p>
+        <label for="ai-key">${activeConfigured ? 'Remplacer la clé API ' : 'Ajouter la clé API '}${service}<input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="${claude ? 'sk-ant-…' : 'sk-…'}" ${disabled}></label>
+        <div class="folder-actions"><button type="button" class="primary" data-save-ai-key ${disabled}>Enregistrer la clé</button>${activeConfigured ? `<button type="button" class="plain-button" data-test-ai ${disabled}>Tester la connexion</button><button type="button" class="plain-button" data-remove-ai-key ${disabled}>Supprimer</button>` : ''}</div>
+        </section><p class="settings-note ai-privacy">${settingsBusy ? 'Traitement en cours… ' : ''}La clé est protégée dans le coffre de Windows. Le test utilise trois demandes d’exemple.</p><details class="ai-information"><summary>À propos de la dictée et des services</summary><p class="settings-note">Le microphone est transcrit localement avec Nemotron 3.5. Le texte reconnu est ensuite envoyé au service choisi.</p><p class="settings-note">Le service choisi facture l’utilisation sur le compte de la clé API.</p></details>
         ${settingsSuccess ? `<p class="settings-success" role="status">${esc(settingsSuccess)}</p>` : ''}
-        ${settingsError || aiSettings.authError ? `<p class="translation-error" role="status">${esc(settingsError || aiSettings.authError)}</p>` : ''}
+        ${settingsError ? `<p class="translation-error" role="status">${esc(settingsError)}</p>` : ''}
       </div></div></div>`;
     }
     function invoiceNumberControl() {
@@ -729,8 +727,8 @@
           <div class="section-head"><div class="section-title"><h3>${kindTitle()} à remplir</h3></div><div class="section-tools"><button type="button" class="icon-button save-button" id="save-status" data-save data-state="${saveState()}" aria-label="Enregistrer le brouillon. ${esc(saveStatus)}" title="${esc(saveTooltip())}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v7h9V3M7 21v-8h10v8"></path></svg><span class="save-status-mark" aria-hidden="true"></span><span class="save-status-announcement sr-only" role="status" aria-live="polite">${esc(saveStatus)}</span></button><button type="button" class="icon-button" data-voice aria-label="Remplir en parlant" title="Remplir en parlant"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8"></path></svg></button><button type="button" class="icon-button" data-correct-document aria-label="Corriger tout le document avec l’IA" title="Corriger tout le document avec l’IA">${smallIcon('ai')}</button><button type="button" class="icon-button" data-undo aria-label="Annuler la dernière modification" title="Annuler la dernière modification" ${undoStack.length ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h9a7 7 0 0 1 0 14"></path></svg></button><button type="button" class="icon-button reset-button" data-reset aria-label="Réinitialiser le brouillon" title="Réinitialiser le brouillon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7"></path></svg></button></div></div>
           <div class="validation-panel" id="pdf-validation" role="alert" hidden></div>
           <div class="client-fields"><h4>Projet et client</h4><div class="client-grid">
-            ${input('project','Nom du projet <span class="required">(obligatoire)</span>','Nom du projet')}
             ${input('client','Nom du client <span class="required">(obligatoire)</span>','Nom complet ou entreprise')}
+            ${input('project','Nom du projet <span class="required">(obligatoire)</span>','Nom du projet')}
             ${input('date','Date du document','','date')}
             ${state.kind === 'facture' ? input('dueDate','Date limite de paiement <span class="optional">(facultatif)</span>','','date') : input('validUntil','Valide jusqu’au','','date')}
             ${input('contact','Téléphone <span class="optional">(facultatif)</span>','Numéro de téléphone','tel')}
@@ -1031,61 +1029,31 @@
       document.querySelector('[data-preferences]')?.focus();
     }
     async function changeAiProvider(provider) {
-      if (settingsBusy || !['chatgpt', 'business'].includes(provider)) return;
+      if (settingsBusy || !['openai', 'claude'].includes(provider)) return;
       settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
       try { aiSettings = await runCommand('set_ai_provider', { provider }); }
       catch (error) { settingsError = `Sélection indisponible : ${errorText(error)}`; }
       finally { settingsBusy = false; render(); document.querySelector(`input[name="ai-provider"][value="${provider}"]`)?.focus(); }
     }
-    async function startChatgptLogin() {
-      if (settingsBusy || aiSettings?.provider !== 'chatgpt' || aiSettings.authPending) return;
-      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
-      try {
-        const result = await runCommand('start_chatgpt_login');
-        aiSettings = result.settings;
-        if (result.attemptId) await runCommand('open_chatgpt_login', { attempt: result.attemptId });
-      } catch (error) { settingsError = `Connexion indisponible : ${errorText(error)}`; }
-      finally { settingsBusy = false; render(); document.querySelector('[data-refresh-ai-settings], [data-start-chatgpt-login]')?.focus(); }
-    }
-    async function refreshAiSettings() {
-      if (settingsBusy) return;
-      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
-      try { aiSettings = await runCommand('get_ai_settings'); }
-      catch (error) { settingsError = `Actualisation indisponible : ${errorText(error)}`; }
-      finally { settingsBusy = false; render(); document.querySelector('[data-refresh-ai-settings], [data-test-ai], [data-start-chatgpt-login]')?.focus(); }
-    }
-    async function cancelChatgptLogin() {
-      if (settingsBusy || !aiSettings?.authPending) return;
-      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
-      try { aiSettings = await runCommand('cancel_chatgpt_login'); }
-      catch (error) { settingsError = `Annulation indisponible : ${errorText(error)}`; }
-      finally { settingsBusy = false; render(); document.querySelector('[data-start-chatgpt-login]')?.focus(); }
-    }
-    async function disconnectChatgpt() {
-      if (settingsBusy || !(aiSettings?.chatgptConfigured || aiSettings?.authError)) return;
-      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
-      try { aiSettings = await runCommand('disconnect_chatgpt'); }
-      catch (error) { settingsError = `Déconnexion indisponible : ${errorText(error)}`; }
-      finally { settingsBusy = false; render(); document.querySelector('[data-start-chatgpt-login]')?.focus(); }
-    }
+    const aiServiceName = provider => provider === 'claude' ? 'Claude' : 'ChatGPT';
     async function saveAiKey(remove = false) {
-      if (settingsBusy || aiSettings?.provider !== 'business') return;
-      const provider = 'business';
+      if (settingsBusy || !aiSettings) return;
+      const provider = aiSettings.provider;
       const key = remove ? null : document.getElementById('ai-key')?.value?.trim();
-      if (!remove && !key) { settingsSuccess = ''; settingsError = 'Entrez le jeton Business avant de l’enregistrer.'; render(); return; }
-      if (remove && !confirm('Supprimer les identifiants IA enregistrés pour ce service sur cet ordinateur ?')) return;
+      if (!remove && !key) { settingsSuccess = ''; settingsError = `Collez la clé API ${aiServiceName(provider)} avant de l’enregistrer.`; render(); return; }
+      if (remove && !confirm(`Supprimer la clé API ${aiServiceName(provider)} enregistrée sur cet ordinateur ?`)) return;
       settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
       try {
         aiSettings = await runCommand('set_ai_key', { provider, key });
-        notice(remove ? 'Identifiants supprimés.' : 'Identifiants enregistrés dans Windows. Testez la connexion pour les vérifier.');
+        notice(remove ? 'Clé supprimée.' : 'Clé enregistrée dans Windows. Testez la connexion pour la vérifier.');
       } catch (error) { settingsError = `Enregistrement indisponible : ${errorText(error)}`; }
       finally { settingsBusy = false; render(); document.getElementById('ai-key')?.focus(); }
     }
     async function testAiConnection() {
       if (settingsBusy) return;
-      if (aiSettings?.provider === 'business' && document.getElementById('ai-key')?.value?.trim()) {
-        // Preserve the unsaved replacement instead of testing the previous credential.
-        notice('Enregistrez d’abord le nouveau jeton Business, puis testez la connexion.');
+      if (document.getElementById('ai-key')?.value?.trim()) {
+        // Preserve the unsaved replacement instead of testing the previous key.
+        notice('Enregistrez d’abord la nouvelle clé, puis testez la connexion.');
         return;
       }
       settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
@@ -1096,10 +1064,10 @@
     async function aiReady() {
       try {
         aiSettings = await runCommand('get_ai_settings');
-        const configured = aiSettings.provider === 'business' ? aiSettings.businessConfigured : aiSettings.provider === 'chatgpt' && aiSettings.chatgptConfigured;
-        // Enables an authenticated attempt. Only a completed provider response proves access.
+        const configured = aiSettings.provider === 'claude' ? aiSettings.claudeConfigured : aiSettings.openaiConfigured;
+        // Only a completed provider response proves the key works.
         if (configured) return true;
-        notice(aiSettings.provider === 'business' ? 'Ajoutez votre jeton Business dans les réglages.' : 'Connectez votre compte ChatGPT dans les réglages.');
+        notice(`Ajoutez votre clé API ${aiServiceName(aiSettings.provider)} dans les réglages.`);
         await openAiSettings();
       } catch (error) { notice(`IA indisponible : ${errorText(error)}`); }
       return false;
@@ -1596,10 +1564,6 @@
       if (b.hasAttribute('data-send-email')) { await composeEmail(); return; }
       if (b.hasAttribute('data-ai-settings')) { preferencesOpen = false; await openAiSettings(); return; }
       if (b.hasAttribute('data-close-ai-settings')) { closeAiSettings(); return; }
-      if (b.hasAttribute('data-start-chatgpt-login')) { await startChatgptLogin(); return; }
-      if (b.hasAttribute('data-refresh-ai-settings')) { await refreshAiSettings(); return; }
-      if (b.hasAttribute('data-cancel-chatgpt-login')) { await cancelChatgptLogin(); return; }
-      if (b.hasAttribute('data-disconnect-chatgpt')) { await disconnectChatgpt(); return; }
       if (b.hasAttribute('data-save-ai-key')) { await saveAiKey(); return; }
       if (b.hasAttribute('data-remove-ai-key')) { await saveAiKey(true); return; }
       if (b.hasAttribute('data-retry-document-voice')) { await retryDocumentVoice(); return; }

@@ -19,9 +19,9 @@ const invoke=(name,args={})=>page.evaluate(({name,args})=>window.__TAURI_INTERNA
 const ready=()=>page.waitForFunction(()=>document.querySelector('[data-live-pdf]')?.getAttribute('aria-busy')==='false'&&document.querySelector('.letter-pdf-page')?.naturalWidth>0);
 let temporaryId;const errors=[];page.on('pageerror',e=>errors.push(e.message));
 try {
-  await ready();assert.equal(await invoke('plugin:app|version'),'0.1.33');
+  await ready();assert.equal(await invoke('plugin:app|version'),'0.1.34');
   const aiSettings=await invoke('get_ai_settings');
-  assert.ok(!aiSettings.chatgptConfigured&&!aiSettings.businessConfigured,'Only run with disconnected AI: no live provider calls');
+  assert.ok(!aiSettings.openaiConfigured&&!aiSettings.claudeConfigured,'Only run with disconnected AI: no live provider calls');
   const created=await invoke('new_draft',{kind:'soumission'});temporaryId=created.current.id;
   const draft={...created.current,...sampleDraft('soumission'),id:temporaryId,invoiceNumber:null,issuedNumber:null,
     project:'Essai technique courriel',items:[{description:'armoir en chene',quantity:'2',price:'100'}],noteEntries:[],notes:'',payments:[],deposit:''};

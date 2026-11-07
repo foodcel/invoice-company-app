@@ -10,7 +10,7 @@ export async function invoke(name,args={}) {
   window.__testCalls.push({name,args:clone(args)});
   if(name==='load_state')return snapshot();
   if(name==='save_draft'){current=clone(args.draft);return snapshot();}
-  if(name==='get_ai_settings')return {provider:'chatgpt',chatgptConfigured:window.__testAiMode!=='disconnected',businessConfigured:false};
+  if(name==='get_ai_settings')return {provider:'openai',openaiConfigured:window.__testAiMode!=='disconnected',claudeConfigured:false};
   if(name.startsWith('ai_')){
     if(window.__testAiMode==='pending')return new Promise(resolve=>window.__testHeld.push(resolve));
     throw new Error('Réponse ChatGPT trop volumineuse.');

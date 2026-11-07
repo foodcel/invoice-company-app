@@ -8,7 +8,7 @@ if(window.__bulkFixture){Object.assign(current,{project:'projet armoir',client:'
 const snapshot=()=>clone({current,records:[{id:current.id,draft:current,updatedAt:'2026-10-01',exports:[]}],nextInvoiceNumber:2060,pdfDirectory:'C:/isolated',invoicePdfDirectory:'C:/isolated',quotePdfDirectory:'C:/isolated',usingDefaultDirectory:true});
 export async function invoke(name,args={}) {
  window.__writingCalls ||= [];window.__writingCalls.push({name,args:clone(args)});
- if(name==='get_ai_settings')return {provider:'chatgpt',chatgptConfigured:true,businessConfigured:false};
+ if(name==='get_ai_settings')return {provider:'openai',openaiConfigured:true,claudeConfigured:false};
  if(name==='load_state')return snapshot();
  if(name==='save_draft'){current=clone(args.draft);current.invoiceNumber=current.kind==='facture'?2060:null;return snapshot();}
  if(name==='ai_proofread_text'){
