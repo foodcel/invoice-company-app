@@ -22,7 +22,7 @@ test('option one exposes separated draft action and protects PDFs, sent archives
 
 test('named confirmation and Cancel preserve the exact draft; forged confirmation is inert',async()=>{
  const h=harness(),before=structuredClone(h.records);h.lib.open();await h.lib.handleClick(action('confirm-delete'));assert.equal(h.calls.length,0);
- await h.lib.handleClick(action('request-delete'));assert.match(h.lib.html(),/Cuisine &amp; rangement/);assert.match(h.lib.html(),/Client &lt;test&gt;/);assert.match(h.lib.html(),/action est définitive/);assert.equal(h.calls.length,0);
+ await h.lib.handleClick(action('request-delete'));assert.match(h.lib.html(),/<strong>Client &lt;test&gt;<[/]strong>/);assert.match(h.lib.html(),/Cuisine &amp; rangement/);assert.match(h.lib.html(),/action est définitive/);assert.equal(h.calls.length,0);
  await h.lib.handleClick(action('cancel-delete'));assert.deepEqual(h.records,before);assert.equal(h.calls.length,0);assert.match(h.lib.html(),/library-panel/);
 });
 
