@@ -95,7 +95,8 @@ fn pick_openai_model(ids: &[&str]) -> Option<String> {
     if let Some(found) = OPENAI_PREFERRED.iter().find(|m| ids.contains(m)) { return Some((*found).to_owned()); }
     let mut fallback: Vec<&str> = ids.iter().copied().filter(|id| id.starts_with("gpt-")
         && !["audio", "realtime", "image", "transcribe", "tts", "search", "codex", "instruct", "embedding", "moderation", "preview", "chat-latest"].iter().any(|bad| id.contains(bad))).collect();
-    fallback.sort_unstable();
+    // Newest-looking name first (higher version numbers sort later).
+    fallback.sort_unstable_by(|a, b| b.cmp(a));
     fallback.first().map(|s| (*s).to_owned())
 }
 

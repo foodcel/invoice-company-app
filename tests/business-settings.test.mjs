@@ -15,7 +15,7 @@ function settings(provider = 'openai', overrides = {}) {
   return { provider, openaiConfigured: false, claudeConfigured: false, ...overrides };
 }
 function dialog(aiSettings, overrides = {}) {
-  const context = { settingsOpen: true, settingsBusy: false, settingsError: '', settingsSuccess: '', aiSettings, esc: s => String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'), ...overrides };
+  const context = { settingsOpen: true, settingsBusy: false, settingsStatus: '', settingsError: '', settingsSuccess: '', aiSettings, esc: s => String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'), ...overrides };
   vm.createContext(context);
   vm.runInContext(functionSource('settingsHeader', '    function preferencesDialog('), context);
   vm.runInContext(functionSource('aiSettingsDialog', '    function invoiceNumberControl('), context);
@@ -27,7 +27,7 @@ function controller(aiSettings = settings()) {
   const calls = [], notices = [], listeners = {};
   const field = { value: '', focus() {} };
   const context = {
-    settingsOpen: false, settingsBusy: false, settingsError: '', settingsSuccess: '', aiSettings,
+    settingsOpen: false, settingsBusy: false, settingsStatus: '', settingsError: '', settingsSuccess: '', aiSettings,
     state: {}, busy: false, rowMotionPending:false, mailOpen: false, voiceSession: null, voiceRetryBusy: false, lineAssist: null,
     renders: 0, confirm: () => true, errorText: error => error.message || String(error),
     render: () => context.renders++, notice: message => notices.push(message),
@@ -55,7 +55,7 @@ test('settings offer exactly ChatGPT and Claude, each with a private API key fie
     assert.match(html, /type="password"/);
     assert.match(html, new RegExp(`value="${provider}" checked`));
     assert.match(html, /data-save-ai-key/);
-    assert.match(html, /Enregistrer la clé/);
+    assert.match(html, /Enregistrer et tester/);
     assert.match(html, /data-test-ai/);
     assert.ok(!html.includes('synthetic-do-not-render'));
     assert.deepEqual([...html.matchAll(/name="ai-provider" value="([^"]+)"/g)].map(match => match[1]), ['openai', 'claude']);
@@ -95,17 +95,34 @@ test('opening settings and choosing a provider never contact a service', async (
   assert.equal(probe.calls.length, 2);
 });
 
-test('saving a key sends it for the selected provider and tells the user to test it', async () => {
+test('saving a key stores it for the selected provider, tests it at once and clears the field', async () => {
   for (const provider of ['openai', 'claude']) {
     const probe = controller(settings(provider));
     probe.field.value = '  synthetic-key  ';
-    probe.context.respond = () => settings(provider, { [`${provider}Configured`]: true });
+    const seen = [];
+    probe.context.respond = name => {
+      seen.push([name, probe.context.settingsStatus]);
+      return name === 'set_ai_key' ? settings(provider, { [`${provider}Configured`]: true }) : 'Connexion vérifiée';
+    };
     await probe.click('data-save-ai-key');
-    assert.deepEqual(JSON.parse(JSON.stringify(probe.calls)), [{ name: 'set_ai_key', args: { provider, key: 'synthetic-key' } }]);
+    assert.deepEqual(JSON.parse(JSON.stringify(probe.calls)), [{ name: 'set_ai_key', args: { provider, key: 'synthetic-key' } }, { name: 'test_ai_connection' }]);
+    assert.match(seen[0][1], /Enregistrement de la clé/);
+    assert.match(seen[1][1], /Test en cours/);
     assert.equal(probe.context.aiSettings[`${provider}Configured`], true);
-    assert.match(probe.notices[0], /Clé enregistrée/);
+    assert.equal(probe.context.settingsSuccess, 'Connexion vérifiée');
+    assert.equal(probe.context.settingsStatus, '');
+    assert.equal(probe.field.value, '', 'the pasted key never stays in the field');
     assert.equal(probe.context.settingsBusy, false);
   }
+});
+
+test('switching service clears a pasted key so it cannot look like the other service key', async () => {
+  const probe = controller(settings('claude', { claudeConfigured: true }));
+  probe.field.value = 'synthetic-claude-key';
+  probe.context.respond = (name, args) => settings(args.provider, { claudeConfigured: true });
+  await probe.context.changeAiProvider('openai');
+  assert.equal(probe.field.value, '');
+  assert.equal(probe.context.aiSettings.provider, 'openai');
 });
 
 test('an empty key is rejected locally, naming the selected service', async () => {
@@ -146,19 +163,33 @@ test('AI readiness follows the selected provider key only', async () => {
   }
 });
 
-test('connection test preserves an unsaved replacement and never tests the previous key', async () => {
+test('testing with a pasted key saves it first; testing a saved key only tests', async () => {
   const probe = controller(settings('claude', { claudeConfigured: true }));
-  probe.field.value = 'synthetic-unsaved-replacement';
-  probe.context.respond = () => 'verified';
+  probe.field.value = 'synthetic-new-key';
+  probe.context.respond = name => name === 'set_ai_key' ? settings('claude', { claudeConfigured: true }) : 'verified';
   await probe.click('data-test-ai');
-  assert.equal(probe.calls.length, 0); assert.equal(probe.context.renders, 0); assert.equal(probe.notices.length, 1);
-  assert.equal(probe.field.value, 'synthetic-unsaved-replacement');
-  probe.field.value = '';
+  assert.deepEqual(probe.calls.map(call => call.name), ['set_ai_key', 'test_ai_connection']);
+  assert.equal(probe.calls[0].args.key, 'synthetic-new-key');
+  assert.equal(probe.field.value, '');
+  probe.calls.length = 0;
   await probe.click('data-test-ai');
-  assert.equal(probe.calls.length, 1); assert.equal(probe.calls[0].name, 'test_ai_connection');
+  assert.deepEqual(probe.calls.map(call => call.name), ['test_ai_connection']);
   assert.equal(probe.context.settingsSuccess, 'verified');
   assert.equal(probe.context.settingsError, '');
   assert.equal(probe.context.settingsBusy, false);
+});
+
+test('the test shows progress while running and clears it afterwards', async () => {
+  const probe = controller(settings('openai', { openaiConfigured: true }));
+  let during = '';
+  probe.context.respond = () => { during = probe.context.settingsStatus; return 'ok'; };
+  await probe.click('data-test-ai');
+  assert.match(during, /Test en cours/);
+  assert.equal(probe.context.settingsStatus, '');
+  const running = dialog(settings('openai', { openaiConfigured: true }), { settingsBusy: true, settingsStatus: 'Test en cours : <x>' });
+  assert.match(running, /class="ai-status" role="status"><span class="ai-spinner"/);
+  assert.match(running, /Test en cours : &lt;x&gt;/);
+  assert.doesNotMatch(dialog(settings('openai', { openaiConfigured: true })), /ai-status/);
 });
 
 test('successful connection feedback is escaped and styled separately from red errors', async () => {
@@ -167,17 +198,17 @@ test('successful connection feedback is escaped and styled separately from red e
   probe.context.respond = () => 'Connexion vérifiée <synthetic>';
   await probe.click('data-test-ai');
   const visible = dialog(probe.context.aiSettings, { settingsSuccess: probe.context.settingsSuccess });
-  assert.match(visible, /class="settings-success" role="status">Connexion vérifiée &lt;synthetic&gt;/);
-  assert.doesNotMatch(visible, /class="translation-error"/);
-  assert.match(styles, /\.settings-success\s*\{[^}]*color:\s*var\(--accent\)/);
+  assert.match(visible, /class="ai-result ok" role="status">Connexion vérifiée &lt;synthetic&gt;/);
+  assert.doesNotMatch(visible, /ai-result error/);
+  assert.match(await readFile(new URL('../web/cleanup.css', import.meta.url), 'utf8'), /\.ai-result\.ok\s*\{[^}]*color:\s*var\(--accent\)/);
   probe.context.respond = () => { throw new Error('synthetic connection failure <b>'); };
   await probe.click('data-test-ai');
   assert.equal(probe.context.settingsSuccess, '');
   assert.match(probe.context.settingsError, /Connexion non vérifiée : synthetic connection failure/);
   const failure = dialog(probe.context.aiSettings, { settingsError: probe.context.settingsError });
-  assert.match(failure, /class="translation-error"/);
+  assert.match(failure, /class="ai-result error" role="alert"/);
   assert.match(failure, /&lt;b&gt;/);
-  assert.doesNotMatch(failure, /class="settings-success"/);
+  assert.doesNotMatch(failure, /ai-result ok/);
 });
 
 test('busy settings ignore overlapping actions', async () => {

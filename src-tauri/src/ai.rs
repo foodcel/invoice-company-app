@@ -581,6 +581,24 @@ break", &"k".repeat(401)] {
         assert!(set_key("chatgpt", Some("sk-x")).is_err());
     }
 
+    #[tokio::test]
+    #[ignore = "Explicit live check with the key saved in Windows; three tiny synthetic requests"]
+    async fn live_provider_workflows() {
+        let provider = std::env::var("INVOICE_LIVE_PROVIDER").expect("INVOICE_LIVE_PROVIDER=openai|claude");
+        assert!(has_key(&provider).unwrap(), "no key saved for {provider}");
+        let rewritten = rewrite_line(&provider, "Escalier en chêne, quatre marches. Installation comprise.", "bullets", 0).await.expect("rewrite");
+        assert!(rewritten.contains("chêne"));
+        println!("LIVE rewrite OK: {rewritten}");
+        let translated = translate(&provider, "Escalier", "", &["Escalier en chêne, installation comprise.".into()]).await.expect("translate");
+        assert!(translated.descriptions[0].to_lowercase().contains("oak"));
+        println!("LIVE translate OK: {}", translated.descriptions[0]);
+        let update = extract_document(&provider, "Le client est Client Démonstration. Le projet est Escalier. Un article : escalier en chêne. Quantité deux. Prix unitaire cent dollars.").await.expect("extract");
+        assert_eq!(update.client.as_deref(), Some("Client Démonstration"));
+        assert_eq!(update.items[0].quantity.as_deref(), Some("2"));
+        println!("LIVE extract OK: client={:?} qty={:?} price={:?}", update.client, update.items[0].quantity, update.items[0].price);
+        let proofread = proofread_text(&provider, "installation d un escalier en chene, quatre marche", "prose").await.expect("proofread");
+        println!("LIVE proofread OK: {proofread}");
+    }
     #[test]
     fn email_rewrite_rejects_header_injection_empty_and_oversized_content() {
         assert!(validate_email_text("Facture 2060", "Bonjour, voici votre facture.", "fr").is_ok());

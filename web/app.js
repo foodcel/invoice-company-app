@@ -72,7 +72,7 @@
     let translationLoading = false;
     let settingsOpen = false;
     let preferencesOpen = false;
-    let settingsBusy = false;
+    let settingsBusy = false, settingsStatus = '';
     let settingsError = '';
     let settingsSuccess = '';
     let aiSettings = null;
@@ -661,10 +661,11 @@
         <section class="ai-account"><div class="ai-account-heading"><strong>${service}</strong><span class="ai-connection ${activeConfigured ? 'connected' : ''}">${activeConfigured ? 'Clé enregistrée' : 'Aucune clé'}</span></div>
         <p class="settings-note">${claude ? 'Créez une clé sur console.anthropic.com, section API keys. Elle commence par « sk-ant- ».' : 'Créez une clé sur platform.openai.com, section API keys. Elle commence par « sk- ».'} Collez-la ci-dessous, uniquement sur cet ordinateur.</p>
         <label for="ai-key">${activeConfigured ? 'Remplacer la clé API ' : 'Ajouter la clé API '}${service}<input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="${claude ? 'sk-ant-…' : 'sk-…'}" ${disabled}></label>
-        <div class="folder-actions"><button type="button" class="primary" data-save-ai-key ${disabled}>Enregistrer la clé</button>${activeConfigured ? `<button type="button" class="plain-button" data-test-ai ${disabled}>Tester la connexion</button><button type="button" class="plain-button" data-remove-ai-key ${disabled}>Supprimer</button>` : ''}</div>
+        ${settingsStatus ? `<p class="ai-status" role="status"><span class="ai-spinner" aria-hidden="true"></span>${esc(settingsStatus)}</p>` : ''}
+        <div class="folder-actions"><button type="button" class="primary" data-save-ai-key ${disabled}>Enregistrer et tester</button>${activeConfigured ? `<button type="button" class="plain-button" data-test-ai ${disabled}>Tester la connexion</button><button type="button" class="plain-button" data-remove-ai-key ${disabled}>Supprimer</button>` : ''}</div>
+        ${settingsSuccess ? `<p class="ai-result ok" role="status">${esc(settingsSuccess)}</p>` : ''}
+        ${settingsError ? `<p class="ai-result error" role="alert">${esc(settingsError)}</p>` : ''}
         </section><p class="settings-note ai-privacy">${settingsBusy ? 'Traitement en cours… ' : ''}La clé est protégée dans le coffre de Windows. Le test utilise trois demandes d’exemple.</p><details class="ai-information"><summary>À propos de la dictée et des services</summary><p class="settings-note">Le microphone est transcrit localement avec Nemotron 3.5. Le texte reconnu est ensuite envoyé au service choisi.</p><p class="settings-note">Le service choisi facture l’utilisation sur le compte de la clé API.</p></details>
-        ${settingsSuccess ? `<p class="settings-success" role="status">${esc(settingsSuccess)}</p>` : ''}
-        ${settingsError ? `<p class="translation-error" role="status">${esc(settingsError)}</p>` : ''}
       </div></div></div>`;
     }
     function invoiceNumberControl() {
@@ -1028,38 +1029,45 @@
       settingsOpen = false; settingsError = ''; settingsSuccess = ''; render();
       document.querySelector('[data-preferences]')?.focus();
     }
+    const clearAiKeyField = () => { const field = document.getElementById('ai-key'); if (field) field.value = ''; };
     async function changeAiProvider(provider) {
       if (settingsBusy || !['openai', 'claude'].includes(provider)) return;
-      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
+      settingsBusy = true; settingsError = ''; settingsSuccess = ''; settingsStatus = ''; clearAiKeyField(); render();
       try { aiSettings = await runCommand('set_ai_provider', { provider }); }
       catch (error) { settingsError = `Sélection indisponible : ${errorText(error)}`; }
-      finally { settingsBusy = false; render(); document.querySelector(`input[name="ai-provider"][value="${provider}"]`)?.focus(); }
+      finally { settingsBusy = false; render(); clearAiKeyField(); document.querySelector(`input[name="ai-provider"][value="${provider}"]`)?.focus(); }
     }
     const aiServiceName = provider => provider === 'claude' ? 'Claude' : 'ChatGPT';
+    // Runs the three synthetic requests and shows progress, then a visible result.
+    async function runAiTest() {
+      settingsError = ''; settingsSuccess = ''; settingsStatus = 'Test en cours : rédaction, traduction et remplissage…'; render();
+      try { settingsSuccess = await runCommand('test_ai_connection'); }
+      catch (error) { settingsError = `Connexion non vérifiée : ${errorText(error)}`; }
+      settingsStatus = '';
+    }
     async function saveAiKey(remove = false) {
       if (settingsBusy || !aiSettings) return;
       const provider = aiSettings.provider;
       const key = remove ? null : document.getElementById('ai-key')?.value?.trim();
       if (!remove && !key) { settingsSuccess = ''; settingsError = `Collez la clé API ${aiServiceName(provider)} avant de l’enregistrer.`; render(); return; }
       if (remove && !confirm(`Supprimer la clé API ${aiServiceName(provider)} enregistrée sur cet ordinateur ?`)) return;
-      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
+      settingsBusy = true; settingsError = ''; settingsSuccess = '';
+      settingsStatus = remove ? 'Suppression de la clé…' : 'Enregistrement de la clé dans Windows…'; render();
       try {
         aiSettings = await runCommand('set_ai_key', { provider, key });
-        notice(remove ? 'Clé supprimée.' : 'Clé enregistrée dans Windows. Testez la connexion pour la vérifier.');
+        clearAiKeyField();
+        if (remove) notice('Clé supprimée.');
+        else await runAiTest();
       } catch (error) { settingsError = `Enregistrement indisponible : ${errorText(error)}`; }
-      finally { settingsBusy = false; render(); document.getElementById('ai-key')?.focus(); }
+      finally { settingsBusy = false; settingsStatus = ''; render(); clearAiKeyField(); }
     }
     async function testAiConnection() {
       if (settingsBusy) return;
-      if (document.getElementById('ai-key')?.value?.trim()) {
-        // Preserve the unsaved replacement instead of testing the previous key.
-        notice('Enregistrez d’abord la nouvelle clé, puis testez la connexion.');
-        return;
-      }
-      settingsBusy = true; settingsError = ''; settingsSuccess = ''; render();
-      try { settingsSuccess = await runCommand('test_ai_connection'); }
-      catch (error) { settingsError = `Connexion non vérifiée : ${errorText(error)}`; }
-      finally { settingsBusy = false; render(); }
+      // A pasted key is saved first, then tested, so nothing typed is ignored or lost.
+      if (document.getElementById('ai-key')?.value?.trim()) { await saveAiKey(); return; }
+      settingsBusy = true;
+      try { await runAiTest(); }
+      finally { settingsBusy = false; settingsStatus = ''; render(); }
     }
     async function aiReady() {
       try {

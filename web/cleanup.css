@@ -235,3 +235,11 @@ html.modal-open body { position:fixed; top:var(--modal-scroll-top); left:0; righ
 /* While the search row changes layout, the three tabs share their column evenly so they stretch instead of popping. */
 .library-dialog .library-toolbar.filters-animating .library-filters button { flex:1 1 0; min-width:0; overflow:hidden; }
 .library-dialog .library-toolbar.filters-animating .library-filters { overflow:hidden; }
+/* AI key panel: visible progress and a result right under the buttons. */
+.ai-status { display:flex; align-items:center; gap:10px; margin:14px 0 0; padding:10px 12px; border-radius:9px; background:var(--soft); color:var(--accent); font-size:13px; font-weight:600; line-height:1.4; }
+.ai-spinner { flex:none; width:16px; height:16px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:ai-spin .8s linear infinite; }
+@keyframes ai-spin { to { transform:rotate(360deg); } }
+.ai-result { margin:14px 0 0; padding:10px 12px; border-radius:9px; font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+.ai-result.ok { background:var(--soft); color:var(--accent); font-weight:600; }
+.ai-result.error { background:#fdecea; color:#b42318; border:1px solid #f2b8b5; }
+.app.dark .ai-result.error { background:#3a1f1c; color:#ffb4ab; border-color:#6b3a35; }
