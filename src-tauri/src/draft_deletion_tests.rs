@@ -97,3 +97,62 @@ fn unresolved_export_cannot_be_discarded_even_if_a_file_has_finished_writing() {
     assert_eq!(fs::read(directory.join(filename)).unwrap(), PDF);
     assert!(repo.load().unwrap().pending_export.is_some());
 }
+
+#[test]
+fn issued_document_deletion_trashes_every_pdf_then_removes_it_and_keeps_the_number_cursor() {
+    let (_root, repo) = setup();
+    let draft = ready(&repo, Kind::Facture);
+    let first = repo.export_pdf(draft, PDF.to_vec(), Some(2060), "fr".into()).unwrap();
+    let again = repo.export_pdf(first.snapshot.clone(), PDF.to_vec(), Some(2060), "fr".into()).unwrap();
+    let other = ready(&repo, Kind::Soumission);
+    let issued = repo.load().unwrap().records.iter().find(|r| r.draft.id == first.snapshot.id).unwrap().draft.clone();
+    assert!(issued.issued_number.is_some());
+    assert!(repo.delete_draft(&issued.id, issued.clone()).is_err(), "plain draft deletion stays protected");
+    let cursor = repo.load().unwrap().next_invoice_number;
+    let trashed = std::cell::RefCell::new(vec![]);
+    // A changed document is never deleted.
+    let mut stale = issued.clone(); stale.project = "autre".into();
+    assert!(repo.delete_document(&issued.id, stale, &|p: &Path| { trashed.borrow_mut().push(p.to_path_buf()); Ok(()) }).unwrap_err().contains("changé"));
+    assert!(trashed.borrow().is_empty());
+    let result = repo.delete_document(&issued.id, issued.clone(), &|p: &Path| { trashed.borrow_mut().push(p.to_path_buf()); Ok(()) }).unwrap();
+    assert_eq!(trashed.borrow().len(), 2);
+    assert!(trashed.borrow().contains(&PathBuf::from(&first.path)) && trashed.borrow().contains(&PathBuf::from(&again.path)));
+    assert!(result.records.iter().all(|r| r.draft.id != issued.id));
+    assert!(result.records.iter().any(|r| r.draft.id == other.id));
+    assert_eq!(result.next_invoice_number, cursor);
+    assert!(repo.load().unwrap().versions.get(&issued.id).is_none());
+}
+
+#[test]
+fn a_pdf_that_cannot_be_trashed_blocks_deletion_and_changes_nothing() {
+    let (_root, repo) = setup();
+    let draft = ready(&repo, Kind::Facture);
+    let exported = repo.export_pdf(draft, PDF.to_vec(), Some(2060), "fr".into()).unwrap();
+    let issued = repo.load().unwrap().records.iter().find(|r| r.draft.id == exported.snapshot.id).unwrap().draft.clone();
+    let before = repo.load().unwrap().records.len();
+    let error = repo.delete_document(&issued.id, issued.clone(), &|_: &Path| Err("locked".into())).unwrap_err();
+    assert!(error.contains("Rien n’a été supprimé"));
+    assert_eq!(repo.load().unwrap().records.len(), before);
+    assert!(Path::new(&exported.path).exists());
+}
+
+#[test]
+fn a_missing_pdf_file_does_not_block_deleting_the_record() {
+    let (_root, repo) = setup();
+    let draft = ready(&repo, Kind::Facture);
+    let exported = repo.export_pdf(draft, PDF.to_vec(), Some(2060), "fr".into()).unwrap();
+    fs::remove_file(&exported.path).unwrap();
+    let issued = repo.load().unwrap().records.iter().find(|r| r.draft.id == exported.snapshot.id).unwrap().draft.clone();
+    let result = repo.delete_document(&issued.id, issued.clone(), &|_: &Path| Err("must not be called".into())).unwrap();
+    assert!(result.records.iter().all(|r| r.draft.id != issued.id));
+}
+
+#[test]
+#[ignore = "Puts one tiny temporary file in the real Windows Recycle Bin"]
+fn recycle_bin_helper_really_moves_a_file() {
+    let (root, _repo) = setup();
+    let file = root.path().join("recycle-probe.pdf");
+    fs::write(&file, PDF).unwrap();
+    move_to_recycle_bin(&file).unwrap();
+    assert!(!file.exists());
+}

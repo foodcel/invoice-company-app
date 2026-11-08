@@ -696,6 +696,40 @@ impl Repository {
         store.response(&self.output_dir())
     }
 
+    /// Deletes any document, including issued or exported ones. Its PDFs go to the
+    /// Recycle Bin first; if one cannot be moved, nothing is removed from the app.
+    fn delete_document(&self, id: &str, expected_draft: Draft, trash: &dyn Fn(&Path) -> Result<(), String>) -> AppResult<StateResponse> {
+        let mut store = self.load()?;
+        if store.pending_export.is_some() {
+            return Err("Un PDF doit être finalisé avant de supprimer un document. Rechargez les documents.".into());
+        }
+        let index = store.index(id)?;
+        let record = &store.records[index];
+        if expected_draft.id != id || expected_draft != record.draft {
+            return Err("Le document a changé. Vérifiez-le à nouveau avant de confirmer sa suppression.".into());
+        }
+        for export in &record.exports {
+            let path = Path::new(&export.path);
+            if path.is_file() {
+                trash(path).map_err(|_| format!("Impossible de mettre {} à la corbeille. Fermez le fichier s’il est ouvert, puis réessayez. Rien n’a été supprimé de l’application.", export.filename))?;
+            }
+        }
+        let kind = record.draft.kind;
+        let was_current = store.current_id == id;
+        store.records.remove(index);
+        store.versions.remove(id);
+        if was_current {
+            let draft = blank_draft(kind);
+            store.current_id = draft.id.clone();
+            store.records.push(Record {
+                id: draft.id.clone(), draft, updated_at: Utc::now().to_rfc3339(),
+                exports: vec![], saved_versions: vec![], sent_at: None,
+            });
+        }
+        self.commit(&mut store)?;
+        store.response(&self.output_dir())
+    }
+
     fn load_document_versions(&self, id: &str) -> AppResult<Vec<DocumentVersion>> {
         let store = self.load()?;
         let record = &store.records[store.index(id)?];
@@ -1613,6 +1647,26 @@ fn file_matches_hash(path: &Path, hash: &str) -> bool {
     })
 }
 
+/// Sends a file to the Windows Recycle Bin so a mistaken delete can be undone.
+fn move_to_recycle_bin(path: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::UI::Shell::{SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE, SHFILEOPSTRUCTW};
+        // The list must end with two NUL characters.
+        let from: Vec<u16> = path.as_os_str().encode_wide().chain([0, 0]).collect();
+        let mut op: SHFILEOPSTRUCTW = unsafe { std::mem::zeroed() };
+        op.wFunc = FO_DELETE;
+        op.pFrom = from.as_ptr();
+        op.fFlags = (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT) as _;
+        let code = unsafe { SHFileOperationW(&mut op) };
+        if code != 0 || op.fAnyOperationsAborted != 0 || path.exists() { return Err("Corbeille indisponible.".into()); }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    { let _ = path; Err("La corbeille exige Windows.".into()) }
+}
+
 #[cfg(windows)]
 fn windows_move(source: &Path, target: &Path, replace: bool) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
@@ -1739,6 +1793,16 @@ fn delete_draft(
     expected_draft: Draft,
 ) -> AppResult<StateResponse> {
     with_repo(app, lock, |repo| repo.delete_draft(&id, expected_draft))
+}
+
+#[tauri::command]
+fn delete_document(
+    app: tauri::AppHandle,
+    lock: tauri::State<'_, Mutex<()>>,
+    id: String,
+    expected_draft: Draft,
+) -> AppResult<StateResponse> {
+    with_repo(app, lock, |repo| repo.delete_document(&id, expected_draft, &move_to_recycle_bin))
 }
 
 #[tauri::command]
@@ -1988,6 +2052,7 @@ pub fn run() {
             open_draft,
             create_quote_from_invoice,
             delete_draft,
+            delete_document,
             restore_previous,
             load_document_versions,
             restore_document_version,

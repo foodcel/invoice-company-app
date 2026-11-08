@@ -12,12 +12,29 @@ function harness(options={},create=createDocumentLibrary){
  return {lib,calls,notices,get records(){return records;},set records(r){records=r;},get current(){return current;}};
 }
 
-test('option one exposes separated draft action and protects PDFs, sent archives and issued drafts',()=>{
+test('plain drafts use the draft wording; PDFs, sent archives and issued documents get the full-delete wording',()=>{
  assert.equal(canDeleteDraft(record()),true);assert.equal(canDeleteDraft(null),false);
  for(const protectedRecord of [record('quote-pdf',[{path:'archive.pdf'}]),record('sent',[{sentReceipts:[{acceptedAt:'2026-10-01'}]}]),{...record(),draft:{...draft(),issuedNumber:2060}},{...record(),savedVersions:[{snapshot:{issuedNumber:2060}}]}]){
-  assert.equal(canDeleteDraft(protectedRecord),false);assert.doesNotMatch(libraryDetail(protectedRecord,()=>''),/request-delete/);assert.match(libraryDetail(protectedRecord,()=>''),/draft-protection/);
+  assert.equal(canDeleteDraft(protectedRecord),false);
+  const html=libraryDetail(protectedRecord,()=>'');assert.match(html,/request-delete/);assert.match(html,/Supprimer ce document/);assert.match(html,/corbeille Windows/);assert.doesNotMatch(html,/draft-protection/);
  }
- const html=libraryDetail(record(),()=>'<paper>');assert.match(html,/<div class="delete-zone">.*request-delete/);assert.ok(html.indexOf('delete-zone')>html.indexOf('Versions précédentes'));
+ const html=libraryDetail(record(),()=>'<paper>');assert.match(html,/<div class="delete-zone">.*request-delete/);assert.match(html,/Supprimer ce brouillon/);assert.ok(html.indexOf('delete-zone')>html.indexOf('Versions précédentes'));
+});
+
+test('an issued document is deleted through delete_document after a confirmation that names the PDFs and the Recycle Bin',async()=>{
+ const issued={...record('inv-1',[{path:'a.pdf'},{path:'b.pdf'}]),draft:{...draft('inv-1'),kind:'facture',issuedNumber:2060}};
+ const h=harness({records:[issued]});h.lib.open();
+ await h.lib.handleClick(action('request-delete'));
+ const dialog=h.lib.html();assert.match(dialog,/Supprimer ce document ?/);assert.match(dialog,/2 PDF/);assert.match(dialog,/corbeille Windows/);assert.match(dialog,/Supprimer le document/);
+ assert.equal(h.calls.length,0);
+ await h.lib.handleClick(action('confirm-delete'));
+ assert.equal(h.calls.length,1);assert.equal(h.calls[0][0],'delete_document');assert.equal(h.calls[0][1].id,'inv-1');assert.equal(h.calls[0][1].expectedDraft.issuedNumber,2060);
+ const cancel=harness({records:[issued]});cancel.lib.open();await cancel.lib.handleClick(action('request-delete'));await cancel.lib.handleClick(action('cancel-delete'));assert.equal(cancel.calls.length,0);
+});
+
+test('a plain draft still uses delete_draft',async()=>{
+ const h=harness();h.lib.open();await h.lib.handleClick(action('request-delete'));await h.lib.handleClick(action('confirm-delete'));
+ assert.equal(h.calls[0][0],'delete_draft');
 });
 
 test('named confirmation and Cancel preserve the exact draft; forged confirmation is inert',async()=>{

@@ -61,7 +61,7 @@ export function libraryDetail(record, renderPaper, magnify = '⌕') {
   if (!record) return '<aside class="library-detail library-empty">Aucun document sélectionné.</aside>';
   const status = recordStatus(record), draft = record.draft;
   const explanation = status.className==='sent' ? `Un PDF enregistré de ce document a été accepté par Outlook le ${savedDate(sentDate(record))}. Le brouillon actuel peut différer du PDF envoyé. Les PDF restent conservés.` : status.className==='pdf' ? 'PDF enregistré. Aucun envoi confirmé dans l’historique local. Le brouillon actuel peut différer du PDF enregistré.' : 'Enregistré pour reprendre plus tard. Aucun PDF créé et aucun envoi confirmé dans l’historique local.';
-  const deletion = canDeleteDraft(record) ? `<div class="delete-zone"><button type="button" class="plain-button danger" data-library-action="request-delete">${icon('trash')}Supprimer ce brouillon</button><small>Une confirmation sera demandée.</small></div>` : `<p class="draft-protection">${icon('lock')}<span>Ce document est émis ou possède un PDF. Il reste conservé.</span></p>`;
+  const deletion = `<div class="delete-zone"><button type="button" class="plain-button danger" data-library-action="request-delete">${icon('trash')}${canDeleteDraft(record) ? 'Supprimer ce brouillon' : 'Supprimer ce document'}</button><small>${canDeleteDraft(record) ? 'Une confirmation sera demandée.' : 'Les PDF vont dans la corbeille Windows. Une confirmation sera demandée.'}</small></div>`;
   return `<aside class="library-detail"><div class="library-detail-head"><h4>${escapeText(recordTitle(record))}</h4><button type="button" class="library-magnify" data-review-record aria-label="Agrandir l’aperçu du document">${magnify}</button></div><button type="button" class="library-paper" data-review-record aria-label="Voir le document en grand"><div class="library-detail-paper" aria-hidden="true">${renderPaper(draft)}</div></button>${badges(record)}<strong class="library-client">${escapeText(draft.project || 'Projet à compléter')}</strong><small>${escapeText(savedDate(record.updatedAt))} · ${documentMoney(documentTotal(draft))}</small><p>${escapeText(explanation)}</p><button type="button" class="primary" data-review-record>${status.className==='draft'?'Reprendre le brouillon':'Ouvrir le document'}</button><button type="button" class="plain-button" data-record-history>Versions précédentes</button>${deletion}</aside>`;
 }
 
@@ -169,7 +169,7 @@ export function createDocumentLibrary({ getRecords, getState, command, transitio
     if (!opened) return '';
     if (deletion) {
       const record = deletion.record;
-      return `<div class="recent-backdrop delete-overlay"><section class="recent-panel restore-dialog delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-draft-title" aria-describedby="delete-draft-copy" aria-busy="${busy}"><header><h2 id="delete-draft-title">Supprimer ce brouillon ?</h2>${closeButton('cancel-delete')}</header><p id="delete-draft-copy">Ce brouillon et ses versions de récupération seront supprimés de l’application. Cette action est définitive.</p><div class="restore-summary"><strong>${escapeText(recordTitle(record))}</strong><small>${escapeText(record.draft.project || 'Projet à compléter')} · ${record.draft.kind === 'facture' ? 'Facture' : 'Soumission'} · ${documentMoney(documentTotal(record.draft))}</small></div>${record.id === getState()?.id ? '<p>Un nouveau document vide du même type remplacera le brouillon ouvert.</p>' : ''}<footer>${action('cancel-delete', 'Annuler')}<button type="button" class="danger-fill" data-library-action="confirm-delete"${disabled(busy)}>Supprimer le brouillon</button></footer></section></div>`;
+      return `<div class="recent-backdrop delete-overlay"><section class="recent-panel restore-dialog delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-draft-title" aria-describedby="delete-draft-copy" aria-busy="${busy}"><header><h2 id="delete-draft-title">${deletion.full ? 'Supprimer ce document ?' : 'Supprimer ce brouillon ?'}</h2>${closeButton('cancel-delete')}</header><p id="delete-draft-copy">${deletion.full ? `Ce document, ses versions et ${record.exports?.length || 0} PDF seront retirés de l’application. Les PDF vont dans la corbeille Windows (récupérables). Le numéro de facture n’est pas réutilisé automatiquement.` : 'Ce brouillon et ses versions de récupération seront supprimés de l’application. Cette action est définitive.'}</p><div class="restore-summary"><strong>${escapeText(recordTitle(record))}</strong><small>${escapeText(record.draft.project || 'Projet à compléter')} · ${record.draft.kind === 'facture' ? 'Facture' : 'Soumission'} · ${documentMoney(documentTotal(record.draft))}</small></div>${record.id === getState()?.id ? '<p>Un nouveau document vide du même type remplacera le brouillon ouvert.</p>' : ''}<footer>${action('cancel-delete', 'Annuler')}<button type="button" class="danger-fill" data-library-action="confirm-delete"${disabled(busy)}>${deletion.full ? 'Supprimer le document' : 'Supprimer le brouillon'}</button></footer></section></div>`;
     }
     // One dialog at a time keeps focus, IDs and accessibility unambiguous.
     if (restore) {
@@ -292,9 +292,9 @@ export function createDocumentLibrary({ getRecords, getState, command, transitio
         try {
           if (!await flush()) return true;
           const latest = all().find(record => record.id === pending.id);
-          if (!canDeleteDraft(latest)) { deletion = null; notice('Ce brouillon n’est plus disponible pour la suppression.'); return true; }
-          if (JSON.stringify(latest.draft) !== JSON.stringify(pending.draft)) { deletion.record = clone(latest); notice('Le brouillon a changé. Vérifiez les nouvelles informations avant de confirmer.'); return true; }
-          if (await transition('delete_draft', { id: pending.id, expectedDraft: clone(pending.draft) }, 'Brouillon supprimé.') === true) {
+          if (!latest || (!deletion.full && !canDeleteDraft(latest))) { deletion = null; notice('Ce document n’est plus disponible pour la suppression.'); return true; }
+          if (JSON.stringify(latest.draft) !== JSON.stringify(pending.draft)) { deletion.record = clone(latest); notice('Le document a changé. Vérifiez les nouvelles informations avant de confirmer.'); return true; }
+          if (await transition(deletion.full ? 'delete_document' : 'delete_draft', { id: pending.id, expectedDraft: clone(pending.draft) }, deletion.full ? 'Document supprimé. Ses PDF sont dans la corbeille Windows.' : 'Brouillon supprimé.') === true) {
             deletion = null; selectedId = results()[0]?.id || null;
           }
         } catch (error) { fail(error); }
@@ -337,7 +337,7 @@ export function createDocumentLibrary({ getRecords, getState, command, transitio
       return true;
     }
     if (data.libraryAction === 'request-delete') {
-      if (canDeleteDraft(selected())) { deletion = { record: clone(selected()) }; paint(); if (typeof document !== 'undefined') document.querySelector('[data-library-action="cancel-delete"]:not([aria-label])')?.focus(); }
+      if (selected()) { deletion = { record: clone(selected()), full: !canDeleteDraft(selected()) }; paint(); if (typeof document !== 'undefined') document.querySelector('[data-library-action="cancel-delete"]:not([aria-label])')?.focus(); }
       return true;
     }
     if (data.libraryAction === 'toggle-new') { newOpen = !newOpen; paint(); return true; }
